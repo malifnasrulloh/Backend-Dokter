@@ -1,6 +1,6 @@
 # BackEnd-Dokter — API Server Aplikasi Mobile Dokter SIMRS
 
-Backend khusus untuk **CareDoc EMR** (aplikasi mobile dokter), dipersempit dari backend SIMRS utama hanya berisi endpoint yang dibutuhkan aplikasi Flutter dokter. Berjalan di port **4002** terpisah dari backend utama (4001).
+Backend khusus untuk **CareDoc EMR** (aplikasi mobile dokter), berisi endpoint yang dibutuhkan aplikasi Flutter dokter. Berjalan di port **4002**.
 
 ## Requirements
 
@@ -46,6 +46,10 @@ Server berjalan di **http://localhost:4002**
 ```bash
 # Production
 pm2 start ecosystem.config.js --env production
+
+# Developer
+npm run dev
+bun run dev
 
 # Restart
 pm2 restart backend-dokter
@@ -158,15 +162,6 @@ Response sukses:
   }
 }
 ```
-
-## Catatan Penting
-
-- **Jangan jalankan di port 4001** — konflik dengan backend SIMRS utama
-- `SECRETTOKEN` **harus sama** dengan backend utama agar token JWT dari login bisa diverifikasi
-- Variabel `HOST_WEB`, `HOST_WEB_PORT`, `HOST_WEB_ROOT` wajib diisi agar URL gambar radiologi terbentuk dengan benar
-- Backend ini **tidak memiliki WebSocket** dan **tidak memiliki queue worker** — sengaja untuk efisiensi resource
-
----
 
 ## ☕ Dukung Pengembang
 

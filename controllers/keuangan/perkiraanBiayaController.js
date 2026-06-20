@@ -266,18 +266,18 @@ exports.getPerkiraanBiaya = async (req, res) => {
 
               -- Perkiraan Biaya (Tarif & Penyakit)
               (
-                SELECT COALESCE(SUM(tarif), 0) FROM perkiraan_biaya_ranap WHERE no_rawat = ?
+                SELECT COALESCE(MAX(tarif), 0) FROM perkiraan_biaya_ranap WHERE no_rawat = ?
               ) AS perkiraan_tarif,
 
               (
-                SELECT kd_penyakit FROM perkiraan_biaya_ranap WHERE no_rawat = ? LIMIT 1
+                SELECT GROUP_CONCAT(kd_penyakit SEPARATOR ', ') FROM perkiraan_biaya_ranap WHERE no_rawat = ?
               ) AS kd_penyakit,
 
               (
-                SELECT p.nm_penyakit 
+                SELECT GROUP_CONCAT(p.nm_penyakit SEPARATOR ', ') 
                 FROM perkiraan_biaya_ranap pbr
                 INNER JOIN penyakit p ON pbr.kd_penyakit = p.kd_penyakit
-                WHERE pbr.no_rawat = ? LIMIT 1
+                WHERE pbr.no_rawat = ?
               ) AS nm_penyakit_ina
           `;
 

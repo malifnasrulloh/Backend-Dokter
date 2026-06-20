@@ -13,37 +13,37 @@ exports.getKebidananIgd = async (req, res) => {
     const [kebidanan] = await db.query(
       `
       SELECT igd.*, pg.nama AS nama_petugas
-      FROM penilaian_awal_keperawatan_kebidanan_igd igd
+      FROM penilaian_awal_keperawatan_kebidanan igd
       LEFT JOIN pegawai pg ON igd.nip = pg.nik
       WHERE igd.no_rawat = ?
     `,
       [no_rawat]
     );
 
-    const [masalah] = await db.query(
-      `
-      SELECT pm.kode_masalah, mm.nama_masalah
-      FROM penilaian_awal_keperawatan_kebidanan_masalah_igd pm
-      LEFT JOIN master_masalah_keperawatan_kebidanan mm ON pm.kode_masalah = mm.kode_masalah
-      WHERE pm.no_rawat = ?
-    `,
-      [no_rawat]
-    );
+    const firstKebidanan = kebidanan[0] || null;
 
-    const [rencana] = await db.query(
-      `
-      SELECT pr.kode_rencana, mr.rencana_kebidanan
-      FROM penilaian_awal_keperawatan_kebidanan_rencana_igd pr
-      LEFT JOIN master_rencana_keperawatan_kebidanan mr ON pr.kode_rencana = mr.kode_rencana
-      WHERE pr.no_rawat = ?
-    `,
-      [no_rawat]
-    );
+    let masalah_kebidanan = [];
+    let rencana_kebidanan = [];
+
+    if (firstKebidanan) {
+      if (firstKebidanan.masalah) {
+        masalah_kebidanan = firstKebidanan.masalah
+          .split(/,|\n/)
+          .map((item) => item.trim())
+          .filter(Boolean);
+      }
+      if (firstKebidanan.tindakan) {
+        rencana_kebidanan = firstKebidanan.tindakan
+          .split(/,|\n/)
+          .map((item) => item.trim())
+          .filter(Boolean);
+      }
+    }
 
     const result = {
-      kebidanan: kebidanan[0] || null,
-      masalah_kebidanan: masalah.map((row) => row.nama_masalah),
-      rencana_kebidanan: rencana.map((row) => row.rencana_kebidanan),
+      kebidanan: firstKebidanan,
+      masalah_kebidanan,
+      rencana_kebidanan,
     };
 
     return response.ok(res, result);
@@ -51,3 +51,4 @@ exports.getKebidananIgd = async (req, res) => {
     return response.internalError(req, res, err);
   }
 };
+

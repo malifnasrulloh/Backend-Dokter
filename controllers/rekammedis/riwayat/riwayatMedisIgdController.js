@@ -38,14 +38,14 @@ exports.getRiwayatMedisIgd = async (req, res) => {
           penilaian_medis_igd.abdomen,
           penilaian_medis_igd.ekstremitas,
           penilaian_medis_igd.genital,
-          penilaian_medis_igd.ket_kepala,
-          penilaian_medis_igd.ket_mata,
-          penilaian_medis_igd.ket_gigi,
-          penilaian_medis_igd.ket_leher,
-          penilaian_medis_igd.ket_thorax,
-          penilaian_medis_igd.ket_abdomen,
-          penilaian_medis_igd.ket_genital,
-          penilaian_medis_igd.ket_ekstremitas,
+          penilaian_medis_igd.kepala AS ket_kepala,
+          penilaian_medis_igd.mata AS ket_mata,
+          penilaian_medis_igd.gigi AS ket_gigi,
+          penilaian_medis_igd.leher AS ket_leher,
+          penilaian_medis_igd.thoraks AS ket_thorax,
+          penilaian_medis_igd.abdomen AS ket_abdomen,
+          penilaian_medis_igd.genital AS ket_genital,
+          penilaian_medis_igd.ekstremitas AS ket_ekstremitas,
           penilaian_medis_igd.ket_lokalis,
           penilaian_medis_igd.ekg,
           penilaian_medis_igd.rad,
@@ -66,3 +66,4 @@ exports.getRiwayatMedisIgd = async (req, res) => {
   }
   return response.ok(res, rows);
 };
+

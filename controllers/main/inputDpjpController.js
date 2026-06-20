@@ -11,24 +11,24 @@ exports.getDpjp = async (req, res) => {
     return validateErrors;
   }
   const query =
-    'SELECT dpjp_ranap.no_rawat,dpjp_ranap.kd_dokter,dpjp_ranap.pjranap_ke,dokter.nm_dokter FROM dpjp_ranap inner join dokter on dpjp_ranap.kd_dokter = dokter.kd_dokter WHERE dpjp_ranap.no_rawat = ? ORDER BY pjranap_ke ASC';
+    'SELECT dpjp_ranap.no_rawat, dpjp_ranap.kd_dokter, dokter.nm_dokter FROM dpjp_ranap inner join dokter on dpjp_ranap.kd_dokter = dokter.kd_dokter WHERE dpjp_ranap.no_rawat = ?';
   const [result] = await db.execute(query, [no_rawat]);
-  return response.ok(res, result);
+  const mappedResult = result.map((row, index) => ({
+    ...row,
+    pjranap_ke: (index + 1).toString(),
+  }));
+  return response.ok(res, mappedResult);
 };
 
 exports.inputDpjp = async (req, res) => {
-  const { no_rawat, kd_dokter, pjranap_ke } = req.body;
+  const { no_rawat, kd_dokter } = req.body;
 
-  if (!no_rawat || !Array.isArray(kd_dokter) || !Array.isArray(pjranap_ke)) {
+  if (!no_rawat || !Array.isArray(kd_dokter)) {
     return response.badRequest(
       req,
       res,
-      'Format data tidak valid. kd_dokter dan pjranap_ke harus berupa array.'
+      'Format data tidak valid. kd_dokter harus berupa array.'
     );
-  }
-
-  if (kd_dokter.length !== pjranap_ke.length) {
-    return response.badRequest(req, res, 'Jumlah dokter dan urutan prioritas tidak sinkron.');
   }
 
   const connection = await db.getConnection();
@@ -37,9 +37,9 @@ exports.inputDpjp = async (req, res) => {
   try {
     await connection.execute('DELETE FROM dpjp_ranap WHERE no_rawat = ?', [no_rawat]);
 
-    const values = kd_dokter.map((kd, index) => [no_rawat, kd, pjranap_ke[index]]);
+    const values = kd_dokter.map((kd) => [no_rawat, kd]);
 
-    const query = 'INSERT INTO dpjp_ranap (no_rawat, kd_dokter, pjranap_ke) VALUES ?';
+    const query = 'INSERT INTO dpjp_ranap (no_rawat, kd_dokter) VALUES ?';
 
     await connection.query(query, [values]);
 
@@ -60,10 +60,10 @@ exports.inputDpjp = async (req, res) => {
 };
 
 exports.updateDpjp = async (req, res) => {
-  const { no_rawat, kd_dokter, pjranap_ke } = req.body;
+  const { no_rawat, kd_dokter } = req.body;
 
-  if (!no_rawat || !Array.isArray(kd_dokter) || !Array.isArray(pjranap_ke)) {
-    return response.badRequest(req, res, 'Payload harus berisi array kd_dokter dan pjranap_ke');
+  if (!no_rawat || !Array.isArray(kd_dokter)) {
+    return response.badRequest(req, res, 'Payload harus berisi array kd_dokter');
   }
 
   const connection = await db.getConnection();
@@ -72,9 +72,9 @@ exports.updateDpjp = async (req, res) => {
   try {
     await connection.execute('DELETE FROM dpjp_ranap WHERE no_rawat = ?', [no_rawat]);
 
-    const values = kd_dokter.map((kd, index) => [no_rawat, kd, pjranap_ke[index]]);
+    const values = kd_dokter.map((kd) => [no_rawat, kd]);
 
-    const query = 'INSERT INTO dpjp_ranap (no_rawat, kd_dokter, pjranap_ke) VALUES ?';
+    const query = 'INSERT INTO dpjp_ranap (no_rawat, kd_dokter) VALUES ?';
     await connection.query(query, [values]);
 
     await connection.commit();
@@ -113,22 +113,9 @@ exports.deleteDpjp = async (req, res) => {
       no_rawat,
       kd_dokter,
     ]);
-    const [remaining] = await connection.execute(
-      'SELECT kd_dokter FROM dpjp_ranap WHERE no_rawat = ? ORDER BY pjranap_ke ASC',
-      [no_rawat]
-    );
-
-    if (remaining.length > 0) {
-      for (let i = 0; i < remaining.length; i++) {
-        await connection.execute(
-          'UPDATE dpjp_ranap SET pjranap_ke = ? WHERE no_rawat = ? AND kd_dokter = ?',
-          [(i + 1).toString(), no_rawat, remaining[i].kd_dokter]
-        );
-      }
-    }
 
     await connection.commit();
-    response.ok(res, { message: 'Dokter dihapus dan urutan diperbarui' });
+    response.ok(res, { message: 'Dokter berhasil dihapus dari DPJP' });
   } catch (error) {
     await connection.rollback();
     logger.error('Delete Error:', error);
@@ -137,3 +124,4 @@ exports.deleteDpjp = async (req, res) => {
     connection.release();
   }
 };
+

@@ -29,6 +29,7 @@ router.get('/soap-ranap', asyncHandler(riwayatSoapRanapController.getRiwayatSoap
 
 // Diagnosa & Prosedur
 router.get('/diagnosa', asyncHandler(riwayatDiagnosaProsedurController.getDiagnosa));
+router.get('/prosedur', asyncHandler(riwayatDiagnosaProsedurController.getProsedur));
 
 // Obat
 router.get('/pemberian-obat', asyncHandler(riwayatObatController.getPemberianObat));

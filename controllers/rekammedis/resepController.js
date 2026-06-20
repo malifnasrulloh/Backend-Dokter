@@ -3,6 +3,7 @@ const response = require('../../middleware/responseHandler');
 const validateParams = require('../../middleware/validateParams');
 const dayjs = require('dayjs');
 const { logger } = require('../../middleware/logger');
+const cache = require('../../utils/cache');
 
 // ── GET MEDICINE LIST (WITH STOCK) ───────────────────────────────────────────
 
@@ -13,59 +14,65 @@ exports.getMedicineList = async (req, res) => {
   const limitNum = Number.parseInt(limit, 10) || 20;
   const offset = (pageNum - 1) * limitNum;
 
+  const cacheKey = `master:obat:search:${keyword || ''}:page:${pageNum}:limit:${limitNum}`;
+
   try {
-    let query = knex('databarang as db')
-      .leftJoin('kodesatuan as ks', 'db.kode_sat', 'ks.kode_sat')
-      .leftJoin('gudangbarang as gb', 'db.kode_brng', 'gb.kode_brng')
-      .select(
-        'db.kode_brng',
-        'db.nama_brng',
-        'ks.satuan',
-        'db.ralan as harga',
-        knex.raw('COALESCE(SUM(gb.stok), 0) as total_stok')
-      )
-      .where('db.status', '1');
+    const cachedData = await cache.remember(cacheKey, async () => {
+      let query = knex('databarang as db')
+        .leftJoin('kodesatuan as ks', 'db.kode_sat', 'ks.kode_sat')
+        .leftJoin('gudangbarang as gb', 'db.kode_brng', 'gb.kode_brng')
+        .select(
+          'db.kode_brng',
+          'db.nama_brng',
+          'ks.satuan',
+          'db.ralan as harga',
+          knex.raw('COALESCE(SUM(gb.stok), 0) as total_stok')
+        )
+        .where('db.status', '1');
 
-    if (keyword && keyword.trim() !== '') {
-      const searchPattern = `%${keyword.trim()}%`;
-      query = query.andWhere((builder) => {
-        builder.where('db.nama_brng', 'like', searchPattern)
-               .orWhere('db.kode_brng', 'like', searchPattern);
-      });
-    }
-
-    query = query.groupBy('db.kode_brng', 'db.nama_brng', 'ks.satuan', 'db.ralan');
-
-    // Run total count query
-    const totalQuery = knex.select(knex.raw('count(distinct db.kode_brng) as total'))
-      .from('databarang as db')
-      .where('db.status', '1');
-
-    if (keyword && keyword.trim() !== '') {
-      const searchPattern = `%${keyword.trim()}%`;
-      totalQuery.andWhere((builder) => {
-        builder.where('db.nama_brng', 'like', searchPattern)
-                  .orWhere('db.kode_brng', 'like', searchPattern);
-      });
-    }
-
-    const [totalRecord, list] = await Promise.all([
-      totalQuery.first(),
-      query.orderBy('db.nama_brng', 'asc').limit(limitNum).offset(offset)
-    ]);
-
-    const totalCount = totalRecord?.total || 0;
-    const totalPages = Math.ceil(totalCount / limitNum);
-
-    return response.ok(res, {
-      list,
-      pagination: {
-        total: totalCount,
-        page: pageNum,
-        limit: limitNum,
-        total_pages: totalPages
+      if (keyword && keyword.trim() !== '') {
+        const searchPattern = `%${keyword.trim()}%`;
+        query = query.andWhere((builder) => {
+          builder.where('db.nama_brng', 'like', searchPattern)
+                 .orWhere('db.kode_brng', 'like', searchPattern);
+        });
       }
-    });
+
+      query = query.groupBy('db.kode_brng', 'db.nama_brng', 'ks.satuan', 'db.ralan');
+
+      // Run total count query
+      const totalQuery = knex.select(knex.raw('count(distinct db.kode_brng) as total'))
+        .from('databarang as db')
+        .where('db.status', '1');
+
+      if (keyword && keyword.trim() !== '') {
+        const searchPattern = `%${keyword.trim()}%`;
+        totalQuery.andWhere((builder) => {
+          builder.where('db.nama_brng', 'like', searchPattern)
+                    .orWhere('db.kode_brng', 'like', searchPattern);
+        });
+      }
+
+      const [totalRecord, list] = await Promise.all([
+        totalQuery.first(),
+        query.orderBy('db.nama_brng', 'asc').limit(limitNum).offset(offset)
+      ]);
+
+      const totalCount = totalRecord?.total || 0;
+      const totalPages = Math.ceil(totalCount / limitNum);
+
+      return {
+        list,
+        pagination: {
+          total: totalCount,
+          page: pageNum,
+          limit: limitNum,
+          total_pages: totalPages
+        }
+      };
+    }, 300);
+
+    return response.ok(res, cachedData);
   } catch (error) {
     logger.error('Get Medicine List Error:', error);
     return response.internalError(req, res, error, 'Gagal mengambil daftar obat');
@@ -135,6 +142,7 @@ exports.createPrescription = async (req, res) => {
     await trx('resep_dokter').insert(resepDokterRows);
 
     await trx.commit();
+    await cache.delByPrefix('master:obat:search:');
 
     return response.created(res, {
       no_resep,
@@ -182,6 +190,7 @@ exports.deletePrescription = async (req, res) => {
     await trx('resep_obat').where({ no_resep }).del();
 
     await trx.commit();
+    await cache.delByPrefix('master:obat:search:');
     return response.ok(res, { no_resep, message: 'Resep obat berhasil dihapus' });
   } catch (error) {
     await trx.rollback();

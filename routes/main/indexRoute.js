@@ -104,6 +104,9 @@ router.route('/perkiraan-biaya', require('../keuangan/perkiraanBiayaRoute'));
 router.use('/soap/*', validateTokenJWT);
 router.route('/soap', require('../rekammedis/soapRoute'));
 
+// ── REAL-TIME NOTIFICATIONS (SSE) ─────────────────────────────────────────────
+router.get('/notifications', validateTokenJWT, require('../../controllers/main/notificationController').sseNotificationConnection);
+
 // ── KONSULTASI MEDIK ──────────────────────────────────────────────────────────
 router.use('/konsultasi/*', validateTokenJWT);
 router.route('/konsultasi', require('../rekammedis/konsultasiRoute'));

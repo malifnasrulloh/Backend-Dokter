@@ -161,6 +161,24 @@ exports.createConsultationRequest = async (req, res) => {
     };
 
     await knex('konsultasi_medik').insert(data);
+
+    // Send real-time SSE notification
+    try {
+      const { sendNotification } = require('../../controllers/main/notificationController');
+      const sender = await knex('dokter').where('kd_dokter', doctorNik).select('nm_dokter').first();
+      await sendNotification(kd_dokter_dikonsuli, 'consultation_request', {
+        no_permintaan: data.no_permintaan,
+        no_rawat: data.no_rawat,
+        tgl_pesan: data.tanggal,
+        kd_dokter_pemberi: doctorNik,
+        nm_dokter_pemberi: sender?.nm_dokter || doctorNik,
+        diagnosa_kerja: data.diagnosa_kerja,
+        uraian_konsultasi: data.uraian_konsultasi,
+      });
+    } catch (sseErr) {
+      logger.error('Failed to send SSE notification:', sseErr);
+    }
+
     return response.created(res, data);
   } catch (error) {
     logger.error('Create Consultation Request Error:', error);
@@ -215,6 +233,22 @@ exports.respondToConsultation = async (req, res) => {
         .update(responseData);
     } else {
       await knex('jawaban_konsultasi_medik').insert(responseData);
+    }
+
+    // Send real-time SSE notification
+    try {
+      const { sendNotification } = require('../../controllers/main/notificationController');
+      const responder = await knex('dokter').where('kd_dokter', doctorNik).select('nm_dokter').first();
+      await sendNotification(consult.kd_dokter, 'consultation_response', {
+        no_permintaan,
+        tgl_jawab: responseData.tanggal,
+        kd_dokter_dikonsuli: doctorNik,
+        nm_dokter_dikonsuli: responder?.nm_dokter || doctorNik,
+        diagnosa_kerja: responseData.diagnosa_kerja,
+        uraian_jawaban: responseData.uraian_jawaban,
+      });
+    } catch (sseErr) {
+      logger.error('Failed to send SSE notification response:', sseErr);
     }
 
     return response.ok(res, responseData);

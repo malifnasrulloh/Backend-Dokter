@@ -90,7 +90,7 @@ const fetchBedData = async () => {
           bangsal
           INNER JOIN kamar ON kamar.kd_bangsal = bangsal.kd_bangsal
       WHERE
-          kamar.statusdata = '1' AND kamar.kamarreal = 'Ya'
+          kamar.statusdata = '1'
       ORDER BY
           kamar.trf_kamar DESC,
           bangsal.nm_bangsal ASC

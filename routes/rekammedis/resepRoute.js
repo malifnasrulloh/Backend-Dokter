@@ -8,6 +8,10 @@ router.get(
   '/obat-list',
   asyncHandler(resepController.getMedicineList)
 );
+router.get(
+  '/',
+  asyncHandler(resepController.getPrescriptions)
+);
 router.post(
   '/',
   auditTrail('Create Prescription'),

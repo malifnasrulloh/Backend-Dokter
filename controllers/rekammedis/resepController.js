@@ -189,3 +189,36 @@ exports.deletePrescription = async (req, res) => {
     return response.internalError(req, res, error, 'Gagal menghapus resep obat');
   }
 };
+
+exports.getPrescriptions = async (req, res) => {
+  const { no_rawat } = req.query;
+
+  const queryParams = { no_rawat };
+  const validateErrors = validateParams(req, res, queryParams);
+  if (validateErrors) return;
+
+  try {
+    const list = await knex('resep_obat as ro')
+      .join('resep_dokter as rd', 'ro.no_resep', 'rd.no_resep')
+      .join('databarang as db', 'rd.kode_brng', 'db.kode_brng')
+      .leftJoin('kodesatuan as ks', 'db.kode_sat', 'ks.kode_sat')
+      .select(
+        'ro.no_resep',
+        'ro.tgl_perawatan',
+        'ro.jam',
+        'rd.kode_brng',
+        'db.nama_brng',
+        'rd.jml',
+        'ks.satuan',
+        'rd.aturan_pakai',
+        'ro.tgl_penyerahan'
+      )
+      .where('ro.no_rawat', no_rawat)
+      .orderBy('ro.no_resep', 'desc');
+
+    return response.ok(res, list);
+  } catch (error) {
+    logger.error('Get Prescriptions Error:', error);
+    return response.internalError(req, res, error, 'Gagal mengambil daftar resep');
+  }
+};

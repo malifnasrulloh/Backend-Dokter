@@ -100,4 +100,20 @@ router.route('/pemeriksaan', require('../rekammedis/pemeriksaanSbarRoute'));
 router.use('/perkiraan-biaya/*', validateTokenJWT);
 router.route('/perkiraan-biaya', require('../keuangan/perkiraanBiayaRoute'));
 
+// ── SOAP CRUD ─────────────────────────────────────────────────────────────────
+router.use('/soap/*', validateTokenJWT);
+router.route('/soap', require('../rekammedis/soapRoute'));
+
+// ── KONSULTASI MEDIK ──────────────────────────────────────────────────────────
+router.use('/konsultasi/*', validateTokenJWT);
+router.route('/konsultasi', require('../rekammedis/konsultasiRoute'));
+
+// ── RESEP OBAT ────────────────────────────────────────────────────────────────
+router.use('/resep/*', validateTokenJWT);
+router.route('/resep', require('../rekammedis/resepRoute'));
+
+// ── DIAGNOSA & PROSEDUR ───────────────────────────────────────────────────────
+router.use('/diagnosa-prosedur/*', validateTokenJWT);
+router.route('/diagnosa-prosedur', require('../rekammedis/diagnosaRoute'));
+
 module.exports = router;

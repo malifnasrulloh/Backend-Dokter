@@ -80,6 +80,14 @@ router.route('/jadwal', require('./jadwalRoute'));
 router.use('/dpjp-ranap/*', validateTokenJWT);
 router.route('/dpjp-ranap', require('./inputDpjpRoute'));
 
+// ── PROFILE ──────────────────────────────────────────────────────────────────
+router.use('/profile/*', validateTokenJWT);
+router.route('/profile', require('./profileRoute'));
+
+// ── HARIAN DOKTER ────────────────────────────────────────────────────────────
+router.use('/harian-dokter/*', validateTokenJWT);
+router.route('/harian-dokter', require('./harianDokterRoute'));
+
 // ── RIWAYAT PASIEN (Rekam Medis) ─────────────────────────────────────────────
 router.use('/riwayat/pasien/*', validateTokenJWT);
 router.route('/riwayat/pasien', require('../rekammedis/riwayatPasienRoute'));

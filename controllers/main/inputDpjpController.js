@@ -1,4 +1,4 @@
-const db = require('../../config/db');
+const knex = require('../../config/knex');
 const { logger } = require('../../middleware/logger');
 
 const validateParams = require('../../middleware/validateParams');
@@ -10,14 +10,22 @@ exports.getDpjp = async (req, res) => {
   if (validateErrors) {
     return validateErrors;
   }
-  const query =
-    'SELECT dpjp_ranap.no_rawat, dpjp_ranap.kd_dokter, dokter.nm_dokter FROM dpjp_ranap inner join dokter on dpjp_ranap.kd_dokter = dokter.kd_dokter WHERE dpjp_ranap.no_rawat = ?';
-  const [result] = await db.execute(query, [no_rawat]);
-  const mappedResult = result.map((row, index) => ({
-    ...row,
-    pjranap_ke: (index + 1).toString(),
-  }));
-  return response.ok(res, mappedResult);
+
+  try {
+    const result = await knex('dpjp_ranap')
+      .select('dpjp_ranap.no_rawat', 'dpjp_ranap.kd_dokter', 'dokter.nm_dokter')
+      .innerJoin('dokter', 'dpjp_ranap.kd_dokter', 'dokter.kd_dokter')
+      .where('dpjp_ranap.no_rawat', no_rawat);
+
+    const mappedResult = result.map((row, index) => ({
+      ...row,
+      pjranap_ke: (index + 1).toString(),
+    }));
+    return response.ok(res, mappedResult);
+  } catch (error) {
+    logger.error('Get DPJP Error:', error);
+    return response.internalError(req, res, error, 'Gagal mengambil data DPJP');
+  }
 };
 
 exports.inputDpjp = async (req, res) => {
@@ -31,22 +39,23 @@ exports.inputDpjp = async (req, res) => {
     );
   }
 
-  const connection = await db.getConnection();
-  await connection.beginTransaction();
-
   try {
-    await connection.execute('DELETE FROM dpjp_ranap WHERE no_rawat = ?', [no_rawat]);
+    await knex.transaction(async (trx) => {
+      // 1. Hapus yang lama
+      await trx('dpjp_ranap').where('no_rawat', no_rawat).del();
 
-    const values = kd_dokter.map((kd) => [no_rawat, kd]);
+      // 2. Masukkan yang baru
+      if (kd_dokter.length > 0) {
+        const insertData = kd_dokter.map((kd) => ({
+          no_rawat,
+          kd_dokter: kd,
+        }));
+        await trx('dpjp_ranap').insert(insertData);
+      }
+    });
 
-    const query = 'INSERT INTO dpjp_ranap (no_rawat, kd_dokter) VALUES ?';
-
-    await connection.query(query, [values]);
-
-    await connection.commit();
-    response.created(res, { message: 'Data DPJP berhasil disinkronkan', count: values.length });
+    response.created(res, { message: 'Data DPJP berhasil disinkronkan', count: kd_dokter.length });
   } catch (error) {
-    await connection.rollback();
     logger.error('Transaction Error:', error);
 
     if (error.code === 'ER_DUP_ENTRY') {
@@ -54,8 +63,6 @@ exports.inputDpjp = async (req, res) => {
     }
 
     return response.internalError(req, res, error, 'Gagal menyimpan data ke server');
-  } finally {
-    connection.release();
   }
 };
 
@@ -66,25 +73,23 @@ exports.updateDpjp = async (req, res) => {
     return response.badRequest(req, res, 'Payload harus berisi array kd_dokter');
   }
 
-  const connection = await db.getConnection();
-  await connection.beginTransaction();
-
   try {
-    await connection.execute('DELETE FROM dpjp_ranap WHERE no_rawat = ?', [no_rawat]);
+    await knex.transaction(async (trx) => {
+      await trx('dpjp_ranap').where('no_rawat', no_rawat).del();
 
-    const values = kd_dokter.map((kd) => [no_rawat, kd]);
+      if (kd_dokter.length > 0) {
+        const insertData = kd_dokter.map((kd) => ({
+          no_rawat,
+          kd_dokter: kd,
+        }));
+        await trx('dpjp_ranap').insert(insertData);
+      }
+    });
 
-    const query = 'INSERT INTO dpjp_ranap (no_rawat, kd_dokter) VALUES ?';
-    await connection.query(query, [values]);
-
-    await connection.commit();
     response.ok(res, { message: 'Susunan DPJP berhasil diperbarui' });
   } catch (error) {
-    await connection.rollback();
     logger.error('Update Error:', error);
     return response.internalError(req, res, error, 'Gagal memperbarui susunan DPJP');
-  } finally {
-    connection.release();
   }
 };
 
@@ -95,33 +100,27 @@ exports.deleteDpjp = async (req, res) => {
     return response.badRequest(req, res, 'no_rawat dan kd_dokter diperlukan');
   }
 
-  const connection = await db.getConnection();
-  await connection.beginTransaction();
-
   try {
-    const [check] = await connection.execute(
-      'SELECT * FROM dpjp_ranap WHERE no_rawat = ? AND kd_dokter = ?',
-      [no_rawat, kd_dokter]
-    );
+    let deletedCount = 0;
+    await knex.transaction(async (trx) => {
+      const check = await trx('dpjp_ranap')
+        .where({ no_rawat, kd_dokter })
+        .first();
 
-    if (check.length === 0) {
-      await connection.rollback();
+      if (check) {
+        deletedCount = await trx('dpjp_ranap')
+          .where({ no_rawat, kd_dokter })
+          .del();
+      }
+    });
+
+    if (deletedCount === 0) {
       return response.noContent(res);
     }
 
-    await connection.execute('DELETE FROM dpjp_ranap WHERE no_rawat = ? AND kd_dokter = ?', [
-      no_rawat,
-      kd_dokter,
-    ]);
-
-    await connection.commit();
     response.ok(res, { message: 'Dokter berhasil dihapus dari DPJP' });
   } catch (error) {
-    await connection.rollback();
     logger.error('Delete Error:', error);
     return response.internalError(req, res, error, 'Terjadi kesalahan saat menghapus data');
-  } finally {
-    connection.release();
   }
 };
-

@@ -1,10 +1,13 @@
 const { Hono } = require('hono');
 const honoLoader = require('./loaders/hono');
 const db = require('./config/db');
+const { runMigrations } = require('./config/dbMigrate');
 const cache = require('./utils/cache');
 const { logger } = require('./middleware/logger');
 
 async function startServer() {
+  await runMigrations();
+
   const app = new Hono();
   const PORT = process.env.PORT || 4002;
 

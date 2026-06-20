@@ -1,7 +1,17 @@
 const jose = require('jose');
+const { z } = require('zod');
 const db = require('../../config/db');
 const validateParams = require('../../middleware/validateParams');
 const response = require('../../middleware/responseHandler');
+
+const loginSchema = z.object({
+  username: z.any().refine((val) => typeof val === 'string' && val.trim().length > 0, {
+    message: 'Username tidak boleh kosong',
+  }),
+  password: z.any().refine((val) => typeof val === 'string' && val.trim().length > 0, {
+    message: 'Password tidak boleh kosong',
+  }),
+});
 const redisClient = require('../../config/redis');
 
 const secretKey = new TextEncoder().encode(process.env.SECRETTOKEN);
@@ -10,6 +20,11 @@ const secretKey = new TextEncoder().encode(process.env.SECRETTOKEN);
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_WINDOW_SEC = 15 * 60; // 15 menit
 const memLoginAttempts = new Map(); // fallback jika Redis tidak ready
+
+// Cache untuk kolom tabel user (TTL 2 jam)
+let cachedUserColumns = null;
+let cachedUserColumnsExpiry = 0;
+const USER_COLUMNS_CACHE_TTL = 2 * 60 * 60 * 1000; // 2 jam
 
 async function getLoginAttempts(username) {
   if (redisClient.status === 'ready') {
@@ -48,9 +63,11 @@ async function resetLoginAttempts(username) {
 exports.authentication = async (req, res) => {
   const { username, password } = req.body;
 
-  const queryParams = { username, password };
-  const validateErrors = validateParams(req, res, queryParams);
-  if (validateErrors) return;
+  const parsed = loginSchema.safeParse({ username, password });
+  if (!parsed.success) {
+    const errorMsg = parsed.error.issues.map((i) => i.message).join(', ');
+    return response.badRequest(req, res, errorMsg);
+  }
 
   // Cek lockout sebelum query ke DB
   const attempts = await getLoginAttempts(username);
@@ -72,8 +89,16 @@ exports.authentication = async (req, res) => {
     TRIM(CAST(AES_DECRYPT(usere, ?) AS CHAR)) = ?
     AND TRIM(CAST(AES_DECRYPT(passworde, ?) AS CHAR)) = ?`;
 
-  const [columns] = await db.query('SHOW COLUMNS FROM user');
-  const dbColumns = columns.map((c) => c.Field);
+  let dbColumns;
+  const now = Date.now();
+  if (cachedUserColumns && now < cachedUserColumnsExpiry) {
+    dbColumns = cachedUserColumns;
+  } else {
+    const [columns] = await db.query('SHOW COLUMNS FROM user');
+    dbColumns = columns.map((c) => c.Field);
+    cachedUserColumns = dbColumns;
+    cachedUserColumnsExpiry = now + USER_COLUMNS_CACHE_TTL;
+  }
   const allowedAccessColumns = dbColumns.filter(
     (col) => col !== 'id_user' && col !== 'password'
   );

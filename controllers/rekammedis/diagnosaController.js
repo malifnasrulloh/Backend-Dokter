@@ -2,6 +2,7 @@ const knex = require('../../config/knex');
 const response = require('../../middleware/responseHandler');
 const validateParams = require('../../middleware/validateParams');
 const { logger } = require('../../middleware/logger');
+const cache = require('../../utils/cache');
 
 // ── GET DISEASES (ICD-10 CATALOG) ────────────────────────────────────────────
 
@@ -12,44 +13,50 @@ exports.getDiseases = async (req, res) => {
   const limitNum = Number.parseInt(limit, 10) || 20;
   const offset = (pageNum - 1) * limitNum;
 
+  const cacheKey = `master:icd10:search:${keyword || ''}:page:${pageNum}:limit:${limitNum}`;
+
   try {
-    let query = knex('penyakit').select('kd_penyakit', 'nm_penyakit', 'ciri_ciri', 'keterangan');
+    const cachedData = await cache.remember(cacheKey, async () => {
+      let query = knex('penyakit').select('kd_penyakit', 'nm_penyakit', 'ciri_ciri', 'keterangan');
 
-    if (keyword && keyword.trim() !== '') {
-      const searchPattern = `%${keyword.trim()}%`;
-      query = query.where((builder) => {
-        builder.where('kd_penyakit', 'like', searchPattern)
-               .orWhere('nm_penyakit', 'like', searchPattern);
-      });
-    }
-
-    // Run total count query
-    const totalQuery = knex('penyakit').count('kd_penyakit as total');
-    if (keyword && keyword.trim() !== '') {
-      const searchPattern = `%${keyword.trim()}%`;
-      totalQuery.where((builder) => {
-        builder.where('kd_penyakit', 'like', searchPattern)
-                  .orWhere('nm_penyakit', 'like', searchPattern);
-      });
-    }
-
-    const [totalRecord, list] = await Promise.all([
-      totalQuery.first(),
-      query.orderBy('nm_penyakit', 'asc').limit(limitNum).offset(offset)
-    ]);
-
-    const totalCount = totalRecord?.total || 0;
-    const totalPages = Math.ceil(totalCount / limitNum);
-
-    return response.ok(res, {
-      list,
-      pagination: {
-        total: totalCount,
-        page: pageNum,
-        limit: limitNum,
-        total_pages: totalPages
+      if (keyword && keyword.trim() !== '') {
+        const searchPattern = `%${keyword.trim()}%`;
+        query = query.where((builder) => {
+          builder.where('kd_penyakit', 'like', searchPattern)
+                 .orWhere('nm_penyakit', 'like', searchPattern);
+        });
       }
-    });
+
+      // Run total count query
+      const totalQuery = knex('penyakit').count('kd_penyakit as total');
+      if (keyword && keyword.trim() !== '') {
+        const searchPattern = `%${keyword.trim()}%`;
+        totalQuery.where((builder) => {
+          builder.where('kd_penyakit', 'like', searchPattern)
+                    .orWhere('nm_penyakit', 'like', searchPattern);
+        });
+      }
+
+      const [totalRecord, list] = await Promise.all([
+        totalQuery.first(),
+        query.orderBy('nm_penyakit', 'asc').limit(limitNum).offset(offset)
+      ]);
+
+      const totalCount = totalRecord?.total || 0;
+      const totalPages = Math.ceil(totalCount / limitNum);
+
+      return {
+        list,
+        pagination: {
+          total: totalCount,
+          page: pageNum,
+          limit: limitNum,
+          total_pages: totalPages
+        }
+      };
+    }, 300);
+
+    return response.ok(res, cachedData);
   } catch (error) {
     logger.error('Get Diseases Catalog Error:', error);
     return response.internalError(req, res, error, 'Gagal mengambil katalog penyakit');
@@ -65,46 +72,52 @@ exports.getProcedures = async (req, res) => {
   const limitNum = Number.parseInt(limit, 10) || 20;
   const offset = (pageNum - 1) * limitNum;
 
+  const cacheKey = `master:icd9:search:${keyword || ''}:page:${pageNum}:limit:${limitNum}`;
+
   try {
-    let query = knex('icd9').select('kode', 'deskripsi_panjang', 'deskripsi_pendek');
+    const cachedData = await cache.remember(cacheKey, async () => {
+      let query = knex('icd9').select('kode', 'deskripsi_panjang', 'deskripsi_pendek');
 
-    if (keyword && keyword.trim() !== '') {
-      const searchPattern = `%${keyword.trim()}%`;
-      query = query.where((builder) => {
-        builder.where('kode', 'like', searchPattern)
-               .orWhere('deskripsi_panjang', 'like', searchPattern)
-               .orWhere('deskripsi_pendek', 'like', searchPattern);
-      });
-    }
-
-    // Run total count query
-    const totalQuery = knex('icd9').count('kode as total');
-    if (keyword && keyword.trim() !== '') {
-      const searchPattern = `%${keyword.trim()}%`;
-      totalQuery.where((builder) => {
-        builder.where('kode', 'like', searchPattern)
-                  .orWhere('deskripsi_panjang', 'like', searchPattern)
-                  .orWhere('deskripsi_pendek', 'like', searchPattern);
-      });
-    }
-
-    const [totalRecord, list] = await Promise.all([
-      totalQuery.first(),
-      query.orderBy('deskripsi_panjang', 'asc').limit(limitNum).offset(offset)
-    ]);
-
-    const totalCount = totalRecord?.total || 0;
-    const totalPages = Math.ceil(totalCount / limitNum);
-
-    return response.ok(res, {
-      list,
-      pagination: {
-        total: totalCount,
-        page: pageNum,
-        limit: limitNum,
-        total_pages: totalPages
+      if (keyword && keyword.trim() !== '') {
+        const searchPattern = `%${keyword.trim()}%`;
+        query = query.where((builder) => {
+          builder.where('kode', 'like', searchPattern)
+                 .orWhere('deskripsi_panjang', 'like', searchPattern)
+                 .orWhere('deskripsi_pendek', 'like', searchPattern);
+        });
       }
-    });
+
+      // Run total count query
+      const totalQuery = knex('icd9').count('kode as total');
+      if (keyword && keyword.trim() !== '') {
+        const searchPattern = `%${keyword.trim()}%`;
+        totalQuery.where((builder) => {
+          builder.where('kode', 'like', searchPattern)
+                    .orWhere('deskripsi_panjang', 'like', searchPattern)
+                    .orWhere('deskripsi_pendek', 'like', searchPattern);
+        });
+      }
+
+      const [totalRecord, list] = await Promise.all([
+        totalQuery.first(),
+        query.orderBy('deskripsi_panjang', 'asc').limit(limitNum).offset(offset)
+      ]);
+
+      const totalCount = totalRecord?.total || 0;
+      const totalPages = Math.ceil(totalCount / limitNum);
+
+      return {
+        list,
+        pagination: {
+          total: totalCount,
+          page: pageNum,
+          limit: limitNum,
+          total_pages: totalPages
+        }
+      };
+    }, 300);
+
+    return response.ok(res, cachedData);
   } catch (error) {
     logger.error('Get Procedures Catalog Error:', error);
     return response.internalError(req, res, error, 'Gagal mengambil katalog prosedur');

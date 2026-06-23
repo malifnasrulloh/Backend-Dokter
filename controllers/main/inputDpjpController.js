@@ -54,6 +54,29 @@ exports.inputDpjp = async (req, res) => {
       }
     });
 
+    // Send real-time SSE notifications
+    try {
+      const { sendNotification } = require('./notificationController');
+      const patientInfo = await knex('reg_periksa')
+        .join('pasien', 'reg_periksa.no_rkm_medis', 'pasien.no_rkm_medis')
+        .select('pasien.nm_pasien')
+        .where('reg_periksa.no_rawat', no_rawat)
+        .first();
+      
+      const nm_pasien = patientInfo ? patientInfo.nm_pasien : 'Pasien Baru';
+
+      if (kd_dokter.length > 0) {
+        for (const kd of kd_dokter) {
+          await sendNotification(kd, 'new_admission', {
+            no_rawat,
+            nm_pasien,
+          });
+        }
+      }
+    } catch (sseErr) {
+      logger.error('Failed to send DPJP SSE notification:', sseErr);
+    }
+
     response.created(res, { message: 'Data DPJP berhasil disinkronkan', count: kd_dokter.length });
   } catch (error) {
     logger.error('Transaction Error:', error);
@@ -85,6 +108,29 @@ exports.updateDpjp = async (req, res) => {
         await trx('dpjp_ranap').insert(insertData);
       }
     });
+
+    // Send real-time SSE notifications
+    try {
+      const { sendNotification } = require('./notificationController');
+      const patientInfo = await knex('reg_periksa')
+        .join('pasien', 'reg_periksa.no_rkm_medis', 'pasien.no_rkm_medis')
+        .select('pasien.nm_pasien')
+        .where('reg_periksa.no_rawat', no_rawat)
+        .first();
+      
+      const nm_pasien = patientInfo ? patientInfo.nm_pasien : 'Pasien Baru';
+
+      if (kd_dokter.length > 0) {
+        for (const kd of kd_dokter) {
+          await sendNotification(kd, 'new_admission', {
+            no_rawat,
+            nm_pasien,
+          });
+        }
+      }
+    } catch (sseErr) {
+      logger.error('Failed to send DPJP SSE notification:', sseErr);
+    }
 
     response.ok(res, { message: 'Susunan DPJP berhasil diperbarui' });
   } catch (error) {

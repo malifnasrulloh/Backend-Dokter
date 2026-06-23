@@ -162,11 +162,34 @@ exports.createConsultationRequest = async (req, res) => {
 
     await knex('konsultasi_medik').insert(data);
 
+    // Check if the consultation is from IGD (Emergency Room)
+    let isIgd = false;
+    let nmPasien = 'Pasien';
+    try {
+      const regInfo = await knex('reg_periksa')
+        .join('poliklinik', 'reg_periksa.kd_poli', 'poliklinik.kd_poli')
+        .join('pasien', 'reg_periksa.no_rkm_medis', 'pasien.no_rkm_medis')
+        .select('poliklinik.nm_poli', 'pasien.nm_pasien')
+        .where('reg_periksa.no_rawat', no_rawat)
+        .first();
+      
+      if (regInfo) {
+        nmPasien = regInfo.nm_pasien;
+        if (regInfo.nm_poli.toUpperCase().includes('IGD') || regInfo.nm_poli.toUpperCase().includes('GAWAT DARURAT')) {
+          isIgd = true;
+        }
+      }
+    } catch (dbErr) {
+      logger.error('Failed to query patient/poli info for IGD check:', dbErr);
+    }
+
     // Send real-time SSE notification
     try {
       const { sendNotification } = require('../../controllers/main/notificationController');
       const sender = await knex('dokter').where('kd_dokter', doctorNik).select('nm_dokter').first();
-      await sendNotification(kd_dokter_dikonsuli, 'consultation_request', {
+      const eventName = isIgd ? 'emergency_igd_consultation' : 'consultation_request';
+
+      await sendNotification(kd_dokter_dikonsuli, eventName, {
         no_permintaan: data.no_permintaan,
         no_rawat: data.no_rawat,
         tgl_pesan: data.tanggal,
@@ -174,6 +197,7 @@ exports.createConsultationRequest = async (req, res) => {
         nm_dokter_pemberi: sender?.nm_dokter || doctorNik,
         diagnosa_kerja: data.diagnosa_kerja,
         uraian_konsultasi: data.uraian_konsultasi,
+        nm_pasien: nmPasien,
       });
     } catch (sseErr) {
       logger.error('Failed to send SSE notification:', sseErr);

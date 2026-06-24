@@ -3,18 +3,20 @@ const response = require('../../middleware/responseHandler');
 const validateParams = require('../../middleware/validateParams');
 const dayjs = require('dayjs');
 const { logger } = require('../../middleware/logger');
+const cache = require('../../utils/cache');
 
 // ── GET INCOMING CONSULTATIONS ───────────────────────────────────────────────
 
 exports.getIncomingConsultations = async (req, res) => {
   const doctorNik = req.user?.username;
+  const { no_rawat } = req.query;
 
   if (!doctorNik) {
     return response.unauthorized(res, null, 'User tidak terautentikasi');
   }
 
   try {
-    const consultations = await knex('konsultasi_medik as km')
+    const query = knex('konsultasi_medik as km')
       .join('dokter as dr_asal', 'km.kd_dokter', 'dr_asal.kd_dokter')
       .join('dokter as dr_tujuan', 'km.kd_dokter_dikonsuli', 'dr_tujuan.kd_dokter')
       .join('reg_periksa as rp', 'km.no_rawat', 'rp.no_rawat')
@@ -40,8 +42,13 @@ exports.getIncomingConsultations = async (req, res) => {
         'jkm.diagnosa_kerja as diagnosa_kerja_jawaban',
         'jkm.uraian_jawaban'
       )
-      .where('km.kd_dokter_dikonsuli', doctorNik)
-      .orderBy('km.tanggal', 'desc');
+      .where('km.kd_dokter_dikonsuli', doctorNik);
+
+    if (no_rawat) {
+      query.where('km.no_rawat', no_rawat);
+    }
+
+    const consultations = await query.orderBy('km.tanggal', 'desc');
 
     if (consultations.length === 0) {
       return response.noContent(res);
@@ -58,13 +65,14 @@ exports.getIncomingConsultations = async (req, res) => {
 
 exports.getOutgoingConsultations = async (req, res) => {
   const doctorNik = req.user?.username;
+  const { no_rawat } = req.query;
 
   if (!doctorNik) {
     return response.unauthorized(res, null, 'User tidak terautentikasi');
   }
 
   try {
-    const consultations = await knex('konsultasi_medik as km')
+    const query = knex('konsultasi_medik as km')
       .join('dokter as dr_asal', 'km.kd_dokter', 'dr_asal.kd_dokter')
       .join('dokter as dr_tujuan', 'km.kd_dokter_dikonsuli', 'dr_tujuan.kd_dokter')
       .join('reg_periksa as rp', 'km.no_rawat', 'rp.no_rawat')
@@ -90,8 +98,13 @@ exports.getOutgoingConsultations = async (req, res) => {
         'jkm.diagnosa_kerja as diagnosa_kerja_jawaban',
         'jkm.uraian_jawaban'
       )
-      .where('km.kd_dokter', doctorNik)
-      .orderBy('km.tanggal', 'desc');
+      .where('km.kd_dokter', doctorNik);
+
+    if (no_rawat) {
+      query.where('km.no_rawat', no_rawat);
+    }
+
+    const consultations = await query.orderBy('km.tanggal', 'desc');
 
     if (consultations.length === 0) {
       return response.noContent(res);
@@ -108,11 +121,17 @@ exports.getOutgoingConsultations = async (req, res) => {
 
 exports.getDoctorsList = async (req, res) => {
   try {
-    const doctors = await knex('dokter')
-      .leftJoin('spesialis', 'dokter.kd_sps', 'spesialis.kd_sps')
-      .select('dokter.kd_dokter', 'dokter.nm_dokter', 'spesialis.nm_sps as spesialis')
-      .where('dokter.status', '1')
-      .orderBy('dokter.nm_dokter', 'asc');
+    const doctors = await cache.remember(
+      'dokter_list_konsultasi',
+      async () => {
+        return await knex('dokter')
+          .leftJoin('spesialis', 'dokter.kd_sps', 'spesialis.kd_sps')
+          .select('dokter.kd_dokter', 'dokter.nm_dokter', 'spesialis.nm_sps as spesialis')
+          .where('dokter.status', '1')
+          .orderBy('dokter.nm_dokter', 'asc');
+      },
+      3600
+    );
 
     return response.ok(res, doctors);
   } catch (error) {

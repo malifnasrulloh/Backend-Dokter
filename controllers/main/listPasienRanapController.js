@@ -79,6 +79,7 @@ exports.getListPasienRanap = async (req, res) => {
     search,
     orderby,
     sort,
+    kd_dokter,
   } = req.query;
 
   const isBelumPulang = belumpulang === 'true';
@@ -115,6 +116,11 @@ exports.getListPasienRanap = async (req, res) => {
   } else if (isTglPulang) {
     conditions.push('kamar_inap.tgl_keluar BETWEEN ? AND ?');
     params.push(tglawal, tglakhir);
+  }
+
+  if (kd_dokter) {
+    conditions.push('dpjp_ranap.kd_dokter = ?');
+    params.push(kd_dokter);
   }
 
   if (statusbayar !== 'semua') {

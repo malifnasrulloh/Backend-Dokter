@@ -51,7 +51,7 @@ const BASE_QUERY = `
     INNER JOIN penjab ON reg_periksa.kd_pj = penjab.kd_pj`;
 
 exports.getListPasienIGD = async (req, res) => {
-  const { statuslanjut, tglawal, tglakhir, search, orderby, sort } = req.query;
+  const { statuslanjut, tglawal, tglakhir, search, orderby, sort, kd_dokter } = req.query;
 
   if (validateParams(req, res, { tglawal, tglakhir })) return;
 
@@ -61,6 +61,11 @@ exports.getListPasienIGD = async (req, res) => {
 
   const conditions = ['reg_periksa.tgl_registrasi BETWEEN ? AND ?', 'reg_periksa.kd_poli = ?'];
   const params = [tglawal, tglakhir, 'IGDK'];
+
+  if (kd_dokter) {
+    conditions.push('reg_periksa.kd_dokter = ?');
+    params.push(kd_dokter);
+  }
 
   if (statuslanjut !== 'semua') {
     conditions.push('reg_periksa.status_lanjut = ?');

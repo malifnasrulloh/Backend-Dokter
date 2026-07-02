@@ -76,8 +76,11 @@ router.route('/list-pasien-igd', require('./listPasienIGDRoute'));
 router.use('/jadwal/*', validateTokenJWT);
 router.route('/jadwal', require('./jadwalRoute'));
 
+const writeAccessMiddleware = require('../../middleware/writeAccessMiddleware');
+
 // ── DPJP RANAP ───────────────────────────────────────────────────────────────
 router.use('/dpjp-ranap/*', validateTokenJWT);
+router.use('/dpjp-ranap/*', writeAccessMiddleware());
 router.route('/dpjp-ranap', require('./inputDpjpRoute'));
 
 // ── PROFILE ──────────────────────────────────────────────────────────────────
@@ -94,6 +97,7 @@ router.route('/riwayat/pasien', require('../rekammedis/riwayatPasienRoute'));
 
 // ── PEMERIKSAAN SBAR ──────────────────────────────────────────────────────────
 router.use('/pemeriksaan/*', validateTokenJWT);
+router.use('/pemeriksaan/*', writeAccessMiddleware());
 router.route('/pemeriksaan', require('../rekammedis/pemeriksaanSbarRoute'));
 
 // ── PERKIRAAN BIAYA (BPJS) ────────────────────────────────────────────────────
@@ -102,6 +106,7 @@ router.route('/perkiraan-biaya', require('../keuangan/perkiraanBiayaRoute'));
 
 // ── SOAP CRUD ─────────────────────────────────────────────────────────────────
 router.use('/soap/*', validateTokenJWT);
+router.use('/soap/*', writeAccessMiddleware());
 router.route('/soap', require('../rekammedis/soapRoute'));
 
 // ── REAL-TIME NOTIFICATIONS (SSE) ─────────────────────────────────────────────
@@ -109,14 +114,17 @@ router.get('/notifications', validateTokenJWT, require('../../controllers/main/n
 
 // ── KONSULTASI MEDIK ──────────────────────────────────────────────────────────
 router.use('/konsultasi/*', validateTokenJWT);
+router.use('/konsultasi/*', writeAccessMiddleware());
 router.route('/konsultasi', require('../rekammedis/konsultasiRoute'));
 
 // ── RESEP OBAT ────────────────────────────────────────────────────────────────
 router.use('/resep/*', validateTokenJWT);
+router.use('/resep/*', writeAccessMiddleware());
 router.route('/resep', require('../rekammedis/resepRoute'));
 
 // ── DIAGNOSA & PROSEDUR ───────────────────────────────────────────────────────
 router.use('/diagnosa-prosedur/*', validateTokenJWT);
+router.use('/diagnosa-prosedur/*', writeAccessMiddleware());
 router.route('/diagnosa-prosedur', require('../rekammedis/diagnosaRoute'));
 
 module.exports = router;

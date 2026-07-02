@@ -420,3 +420,105 @@ exports.changePassword = async (req, res) => {
   return response.notFound(res, 'Data pengguna tidak ditemukan');
 };
 
+exports.getHarianAccess = async (req, res) => {
+  const username = req.user?.username;
+  if (!username) {
+    return response.unauthorized(res, null, 'User tidak terautentikasi');
+  }
+
+  // Check if user is admin
+  const [adminCheck] = await db.query(
+    `SELECT 1 FROM admin WHERE TRIM(CAST(AES_DECRYPT(usere, ?) AS CHAR)) = ?`,
+    [process.env.DB_AES_KEY_USER, username]
+  );
+  if (adminCheck.length === 0) {
+    return response.forbidden(res, 'Hanya administrator yang diizinkan mengakses konfigurasi.');
+  }
+
+  try {
+    // 1. Fetch active doctors
+    const [doctors] = await db.query(`
+      SELECT 
+        dokter.kd_dokter, 
+        dokter.nm_dokter, 
+        spesialis.nm_sps as spesialis
+      FROM dokter
+      LEFT JOIN spesialis ON dokter.kd_sps = spesialis.kd_sps
+      WHERE dokter.status = '1'
+      ORDER BY dokter.nm_dokter ASC
+    `);
+
+    // 2. Fetch harian_dokter state from user table
+    const [users] = await db.query(`
+      SELECT 
+        TRIM(CAST(AES_DECRYPT(id_user, ?) AS CHAR)) as username,
+        harian_dokter
+      FROM user
+    `, [process.env.DB_AES_KEY_USER]);
+
+    const usersMap = {};
+    for (const u of users) {
+      usersMap[u.username] = u.harian_dokter;
+    }
+
+    const result = doctors.map((doc) => {
+      const access = usersMap[doc.kd_dokter] || 'false';
+      return {
+        kd_dokter: doc.kd_dokter,
+        nm_dokter: doc.nm_dokter,
+        spesialis: doc.spesialis || '-',
+        harian_dokter: access === 'true',
+      };
+    });
+
+    return response.ok(res, result);
+  } catch (error) {
+    return response.internalError(req, res, error);
+  }
+};
+
+exports.updateHarianAccess = async (req, res) => {
+  const username = req.user?.username;
+  if (!username) {
+    return response.unauthorized(res, null, 'User tidak terautentikasi');
+  }
+
+  // Check if user is admin
+  const [adminCheck] = await db.query(
+    `SELECT 1 FROM admin WHERE TRIM(CAST(AES_DECRYPT(usere, ?) AS CHAR)) = ?`,
+    [process.env.DB_AES_KEY_USER, username]
+  );
+  if (adminCheck.length === 0) {
+    return response.forbidden(res, 'Hanya administrator yang diizinkan mengubah konfigurasi.');
+  }
+
+  const { kd_dokter, harian_dokter } = req.body;
+  if (!kd_dokter) {
+    return response.badRequest(res, 'Kode dokter wajib diisi');
+  }
+
+  try {
+    const val = harian_dokter === true ? 'true' : 'false';
+
+    const updateQuery = `
+      UPDATE user
+      SET harian_dokter = ?
+      WHERE TRIM(CAST(AES_DECRYPT(id_user, ?) AS CHAR)) = ?
+    `;
+    const [result] = await db.query(updateQuery, [
+      val,
+      process.env.DB_AES_KEY_USER,
+      kd_dokter
+    ]);
+
+    if (result.affectedRows === 0) {
+      return response.notFound(res, 'Pengguna (dokter) tidak ditemukan di tabel user');
+    }
+
+    return response.ok(res, null, 'Akses Harian Dokter berhasil diperbarui');
+  } catch (error) {
+    return response.internalError(req, res, error);
+  }
+};
+
+

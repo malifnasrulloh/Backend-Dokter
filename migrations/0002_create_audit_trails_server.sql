@@ -1,0 +1,13 @@
+CREATE TABLE IF NOT EXISTS `audit_trails_server` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `user` VARCHAR(100) NOT NULL,
+  `action` VARCHAR(50) NOT NULL,
+  `module` VARCHAR(100) NOT NULL,
+  `route` VARCHAR(255) NOT NULL,
+  `payload` LONGTEXT DEFAULT NULL,
+  `ip_address` VARCHAR(50) NOT NULL,
+  `status_code` VARCHAR(10) NOT NULL,
+  `success` TINYINT(1) NOT NULL,
+  `device_info` TEXT DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

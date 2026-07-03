@@ -69,7 +69,7 @@ const honoLimiter = async (c, next) => {
 };
 
 module.exports = (app, _corsOptions) => {
-  app.use('*', compress());
+  app.use('*', compress({ threshold: 1024 }));
 
   app.use(
     '*',

@@ -17,8 +17,8 @@ const db = mysql.createPool({
     10
   ),
   queueLimit: 0,
-  connectTimeout: 20000,
-  idleTimeout: 30000,
+  connectTimeout: 10000,
+  idleTimeout: 60000,
   enableKeepAlive: true,
   keepAliveInitialDelay: 10000,
   timezone: '+07:00',

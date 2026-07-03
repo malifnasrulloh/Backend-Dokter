@@ -4,6 +4,7 @@ const validateParams = require('../../middleware/validateParams');
 const { isValidDate, calculateAge } = require('../../utils/dateHelper');
 const { buildOrderClause } = require('../../utils/paginationHelper');
 const regPeriksaRepo = require('../../repositories/regPeriksaRepository');
+const cache = require('../../utils/cache');
 
 const ALIAS_MAP = {
   status_bayar: 'reg_periksa.status_bayar',
@@ -92,32 +93,44 @@ exports.getListPasienIGD = async (req, res) => {
   );
 
   const query = `${BASE_QUERY} WHERE ${conditions.join(' AND ')}${orderClause}`;
+  const cacheKey = `list_pasien_igd_${JSON.stringify(req.query)}`;
 
-  const [rows] = await db.query(query, params);
+  try {
+    const enrichedRows = await cache.remember(
+      cacheKey,
+      async () => {
+        const [rows] = await db.query(query, params);
+        if (rows.length === 0) return [];
 
-  if (rows.length === 0) {
-    return response.noContent(res);
+        const noRawatList = rows.map((row) => row.no_rawat);
+
+        const [sepRecords, diagnosaRecords] = await Promise.all([
+          regPeriksaRepo.findSepByNoRawatList(noRawatList),
+          regPeriksaRepo.findDiagnosaByNoRawatList(noRawatList),
+        ]);
+
+        const sepMap = regPeriksaRepo.buildGroupMap(sepRecords, 'no_rawat', (r) => r.no_sep);
+        const diagnosaMap = regPeriksaRepo.buildGroupMap(diagnosaRecords, 'no_rawat', (r) => ({
+          kd_penyakit: r.kd_penyakit,
+          nm_penyakit: r.nm_penyakit,
+        }));
+
+        return rows.map((row) => ({
+          ...row,
+          usia: calculateAge(row.tgl_lahir),
+          sep: sepMap[row.no_rawat] || [],
+          diagnosa: diagnosaMap[row.no_rawat] || [],
+        }));
+      },
+      5
+    );
+
+    if (enrichedRows.length === 0) {
+      return response.noContent(res);
+    }
+
+    return response.ok(res, enrichedRows);
+  } catch (error) {
+    return response.internalError(req, res, error);
   }
-
-  const noRawatList = rows.map((row) => row.no_rawat);
-
-  const [sepRecords, diagnosaRecords] = await Promise.all([
-    regPeriksaRepo.findSepByNoRawatList(noRawatList),
-    regPeriksaRepo.findDiagnosaByNoRawatList(noRawatList),
-  ]);
-
-  const sepMap = regPeriksaRepo.buildGroupMap(sepRecords, 'no_rawat', (r) => r.no_sep);
-  const diagnosaMap = regPeriksaRepo.buildGroupMap(diagnosaRecords, 'no_rawat', (r) => ({
-    kd_penyakit: r.kd_penyakit,
-    nm_penyakit: r.nm_penyakit,
-  }));
-
-  const enrichedRows = rows.map((row) => ({
-    ...row,
-    usia: calculateAge(row.tgl_lahir),
-    sep: sepMap[row.no_rawat] || [],
-    diagnosa: diagnosaMap[row.no_rawat] || [],
-  }));
-
-  return response.ok(res, enrichedRows);
 };

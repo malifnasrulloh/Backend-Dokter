@@ -69,7 +69,13 @@ const honoLimiter = async (c, next) => {
 };
 
 module.exports = (app, _corsOptions) => {
-  app.use('*', compress({ threshold: 1024 }));
+  app.use('*', async (c, next) => {
+    if (c.req.header('accept') === 'text/event-stream' || c.req.path === '/api/notifications') {
+      return await next();
+    }
+    const compressMiddleware = compress({ threshold: 1024 });
+    return await compressMiddleware(c, next);
+  });
 
   app.use(
     '*',

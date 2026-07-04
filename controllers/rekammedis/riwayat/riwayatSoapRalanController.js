@@ -35,8 +35,9 @@ exports.getRiwayatSoapRalan = async (req, res) => {
       FROM
           pemeriksaan_ralan
           INNER JOIN pegawai ON pemeriksaan_ralan.nip = pegawai.nik
+          INNER JOIN reg_periksa ON pemeriksaan_ralan.no_rawat = reg_periksa.no_rawat
       WHERE
-          pemeriksaan_ralan.no_rawat = ?
+          reg_periksa.no_rkm_medis = (SELECT no_rkm_medis FROM reg_periksa WHERE no_rawat = ?)
       ORDER BY
           pemeriksaan_ralan.tgl_perawatan,
           pemeriksaan_ralan.jam_rawat`;

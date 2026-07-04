@@ -118,8 +118,8 @@ exports.createPrescription = async (req, res) => {
     // Insert to resep_obat
     const resepObatData = {
       no_resep,
-      tgl_perawatan: today,
-      jam: timeNow,
+      tgl_perawatan: '0000-00-00',
+      jam: '00:00:00',
       no_rawat,
       kd_dokter: doctorNik,
       tgl_peresepan: today,

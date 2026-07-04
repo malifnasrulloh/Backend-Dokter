@@ -215,6 +215,8 @@ exports.getPrescriptions = async (req, res) => {
         'ro.no_resep',
         'ro.tgl_perawatan',
         'ro.jam',
+        'ro.tgl_peresepan',
+        'ro.jam_peresepan',
         'rd.kode_brng',
         'db.nama_brng',
         'rd.jml',

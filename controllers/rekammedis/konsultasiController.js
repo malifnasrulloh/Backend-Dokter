@@ -158,28 +158,32 @@ exports.createConsultationRequest = async (req, res) => {
     const today = dayjs().format('YYYY-MM-DD');
     const todayStr = dayjs().format('YYYYMMDD');
     
-    // Auto-generate no_permintaan matching: KM + YYYYMMDD + 4 digits sequence
-    const maxRecord = await knex('konsultasi_medik')
-      .whereRaw('left(tanggal, 10) = ?', [today])
-      .select(knex.raw('COALESCE(MAX(CONVERT(RIGHT(no_permintaan, 4), SIGNED)), 0) as max_val'))
-      .first();
+    let data;
+    await knex.transaction(async (trx) => {
+      // Auto-generate no_permintaan matching: KM + YYYYMMDD + 4 digits sequence with row/table lock
+      const maxRecord = await trx('konsultasi_medik')
+        .whereRaw('left(tanggal, 10) = ?', [today])
+        .select(knex.raw('COALESCE(MAX(CONVERT(RIGHT(no_permintaan, 4), SIGNED)), 0) as max_val'))
+        .forUpdate()
+        .first();
 
-    const nextSeq = (maxRecord?.max_val || 0) + 1;
-    const paddedSeq = String(nextSeq).padStart(4, '0');
-    const no_permintaan = `KM${todayStr}${paddedSeq}`;
+      const nextSeq = (maxRecord?.max_val || 0) + 1;
+      const paddedSeq = String(nextSeq).padStart(4, '0');
+      const no_permintaan = `KM${todayStr}${paddedSeq}`;
 
-    const data = {
-      no_permintaan,
-      no_rawat,
-      tanggal: dayjs().format('YYYY-MM-DD HH:mm:ss'),
-      jenis_permintaan,
-      kd_dokter: doctorNik,
-      kd_dokter_dikonsuli,
-      diagnosa_kerja: diagnosa_kerja || '',
-      uraian_konsultasi: uraian_konsultasi || '',
-    };
+      data = {
+        no_permintaan,
+        no_rawat,
+        tanggal: dayjs().format('YYYY-MM-DD HH:mm:ss'),
+        jenis_permintaan,
+        kd_dokter: doctorNik,
+        kd_dokter_dikonsuli,
+        diagnosa_kerja: diagnosa_kerja || '',
+        uraian_konsultasi: uraian_konsultasi || '',
+      };
 
-    await knex('konsultasi_medik').insert(data);
+      await trx('konsultasi_medik').insert(data);
+    });
 
     // Check if the consultation is from IGD (Emergency Room)
     let isIgd = false;

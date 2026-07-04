@@ -127,4 +127,20 @@ router.use('/diagnosa-prosedur/*', validateTokenJWT);
 router.use('/diagnosa-prosedur/*', writeAccessMiddleware());
 router.route('/diagnosa-prosedur', require('../rekammedis/diagnosaRoute'));
 
+// ── TEST NOTIFICATION ENDPOINT ────────────────────────────────────────────────
+router.get('/test-notification', validateTokenJWT, async (c) => {
+  const { sendNotification } = require('../../controllers/main/notificationController');
+  const doctorNik = c.get('user')?.username;
+  const event = c.req.query('event') || 'new_admission';
+  
+  await sendNotification(doctorNik, event, {
+    no_rawat: '2026/07/03/0001',
+    nm_pasien: 'Pasien Uji Coba Notifikasi',
+    nm_dokter_pemberi: 'Sistem Admin',
+    pesan: 'Ini adalah notifikasi uji coba dari sistem backend.'
+  });
+  
+  return c.json({ success: true, message: `Notification of type ${event} sent to ${doctorNik}` });
+});
+
 module.exports = router;

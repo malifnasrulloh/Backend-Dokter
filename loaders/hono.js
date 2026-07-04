@@ -23,40 +23,50 @@ const honoLimiter = async (c, next) => {
 
   const isLocal =
     ip === '127.0.0.1' || ip === '::1' || ip.startsWith('192.168.') || ip.startsWith('10.100.0.');
-  if (isLocal) {
-    return await next();
-  }
 
-  const redisKey = `ip:${ip}`;
+  // For local IPs (Docker), use per-user key from JWT instead of bypassing
+  let rateLimitKey;
+  const rateLimitMax = 5000;
+  if (isLocal) {
+    const userData = c.get('user');
+    if (userData?.username) {
+      rateLimitKey = `user:${userData.username}`;
+    } else {
+      // Non-authenticated local requests (health, login) — skip limiter
+      return await next();
+    }
+  } else {
+    rateLimitKey = `ip:${ip}`;
+  }
   try {
     if (redisClient.status !== 'ready') {
       // Fallback ke in-memory limiter — tidak bypass
       const now = Date.now();
-      const entry = memoryLimiter.get(ip) || { count: 0, resetAt: now + MEMORY_WINDOW_MS };
+      const entry = memoryLimiter.get(rateLimitKey) || { count: 0, resetAt: now + MEMORY_WINDOW_MS };
       if (now > entry.resetAt) {
         entry.count = 0;
         entry.resetAt = now + MEMORY_WINDOW_MS;
       }
       entry.count++;
-      memoryLimiter.set(ip, entry);
+      memoryLimiter.set(rateLimitKey, entry);
 
       if (entry.count > MEMORY_LIMIT) {
-        logger.warn(`[MemLimiter] IP ${ip} diblokir (Redis offline fallback): ${entry.count} req`);
+        logger.warn(`[MemLimiter] Key ${rateLimitKey} diblokir (Redis offline fallback): ${entry.count} req`);
         return c.json({ status: 429, message: 'Terlalu banyak permintaan, silakan coba lagi nanti.' }, 429);
       }
       return await next();
     }
 
-    const count = await redisClient.incr(redisKey);
+    const count = await redisClient.incr(rateLimitKey);
     if (count === 1) {
-      await redisClient.expire(redisKey, 900);
+      await redisClient.expire(rateLimitKey, 900);
     }
 
-    if (count > 5000) {
+    if (count > rateLimitMax) {
       return c.json(
         {
           status: 429,
-          message: 'Terlalu banyak permintaan dari IP ini, silakan coba lagi nanti.',
+          message: 'Terlalu banyak permintaan, silakan coba lagi nanti.',
         },
         429
       );

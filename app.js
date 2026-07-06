@@ -13,6 +13,10 @@ async function startServer() {
 
   honoLoader(app);
 
+  // Start background database monitor for real-time notifications
+  const dbMonitor = require('./services/dbMonitorService');
+  dbMonitor.start();
+
   process.on('uncaughtException', (error) => {
     logger.error(`Uncaught Exception: ${error.message}\n${error.stack}`);
   });

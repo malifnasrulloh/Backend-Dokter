@@ -106,7 +106,6 @@ exports.getRiwayatMedisRanapNeonatus = async (req, res) => {
           penilaian_medis_ranap_neonatus.pb,
           penilaian_medis_ranap_neonatus.lk,
           penilaian_medis_ranap_neonatus.ld,
-          penilaian_medis_ranap_neonatus.lp,
           penilaian_medis_ranap_neonatus.kepala,
           penilaian_medis_ranap_neonatus.mata,
           'Normal' AS gigi,

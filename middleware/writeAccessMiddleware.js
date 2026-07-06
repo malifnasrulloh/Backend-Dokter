@@ -7,8 +7,10 @@ const writeAccessMiddleware = () => {
   return async (c, next) => {
     const allowWrite = process.env.ALLOW_MOBILE_WRITE !== 'false';
     const method = c.req.method;
+    const path = c.req.path;
+    const isExempted = path.endsWith('/pemeriksaan/validasi') || path.includes('/konsultasi');
 
-    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method) && !allowWrite) {
+    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method) && !allowWrite && !isExempted) {
       const res = {
         _status: 403,
         status(code) {

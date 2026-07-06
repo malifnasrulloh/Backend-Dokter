@@ -25,14 +25,16 @@ exports.getIncomingConsultations = async (req, res) => {
       .select(
         'km.no_permintaan',
         'km.no_rawat',
-        'km.tanggal as tanggal_konsul',
+        knex.raw("DATE_FORMAT(km.tanggal, '%Y-%m-%d') as tgl_pesan"),
+        knex.raw("DATE_FORMAT(km.tanggal, '%H:%i:%s') as jam_pesan"),
+        knex.raw("DATE_FORMAT(km.tanggal, '%Y-%m-%d') as tgl_perawatan"),
         'km.jenis_permintaan',
-        'km.kd_dokter as kd_dokter_asal',
-        'dr_asal.nm_dokter as nm_dokter_asal',
-        'km.kd_dokter_dikonsuli',
-        'dr_tujuan.nm_dokter as nm_dokter_tujuan',
+        'km.kd_dokter as kd_dokter_peminta',
+        'dr_asal.nm_dokter as nm_dokter_peminta',
+        'km.kd_dokter_dikonsuli as kd_dokter_pemberi',
+        'dr_tujuan.nm_dokter as nm_dokter_pemberi',
         'km.diagnosa_kerja as diagnosa_kerja_konsul',
-        'km.uraian_konsultasi',
+        'km.uraian_konsultasi as deskripsi_rujukan',
         'rp.no_rkm_medis',
         'p.nm_pasien',
         'p.jk as jenis_kelamin',
@@ -40,7 +42,8 @@ exports.getIncomingConsultations = async (req, res) => {
         'rp.sttsumur',
         'jkm.tanggal as tanggal_jawaban',
         'jkm.diagnosa_kerja as diagnosa_kerja_jawaban',
-        'jkm.uraian_jawaban'
+        'jkm.uraian_jawaban as jawaban',
+        knex.raw("CASE WHEN jkm.uraian_jawaban IS NOT NULL THEN 'Sudah Dijawab' ELSE 'Belum Dijawab' END as status")
       )
       .where('km.kd_dokter_dikonsuli', doctorNik);
 
@@ -81,14 +84,16 @@ exports.getOutgoingConsultations = async (req, res) => {
       .select(
         'km.no_permintaan',
         'km.no_rawat',
-        'km.tanggal as tanggal_konsul',
+        knex.raw("DATE_FORMAT(km.tanggal, '%Y-%m-%d') as tgl_pesan"),
+        knex.raw("DATE_FORMAT(km.tanggal, '%H:%i:%s') as jam_pesan"),
+        knex.raw("DATE_FORMAT(km.tanggal, '%Y-%m-%d') as tgl_perawatan"),
         'km.jenis_permintaan',
-        'km.kd_dokter as kd_dokter_asal',
-        'dr_asal.nm_dokter as nm_dokter_asal',
-        'km.kd_dokter_dikonsuli',
-        'dr_tujuan.nm_dokter as nm_dokter_tujuan',
+        'km.kd_dokter as kd_dokter_peminta',
+        'dr_asal.nm_dokter as nm_dokter_peminta',
+        'km.kd_dokter_dikonsuli as kd_dokter_pemberi',
+        'dr_tujuan.nm_dokter as nm_dokter_pemberi',
         'km.diagnosa_kerja as diagnosa_kerja_konsul',
-        'km.uraian_konsultasi',
+        'km.uraian_konsultasi as deskripsi_rujukan',
         'rp.no_rkm_medis',
         'p.nm_pasien',
         'p.jk as jenis_kelamin',
@@ -96,7 +101,8 @@ exports.getOutgoingConsultations = async (req, res) => {
         'rp.sttsumur',
         'jkm.tanggal as tanggal_jawaban',
         'jkm.diagnosa_kerja as diagnosa_kerja_jawaban',
-        'jkm.uraian_jawaban'
+        'jkm.uraian_jawaban as jawaban',
+        knex.raw("CASE WHEN jkm.uraian_jawaban IS NOT NULL THEN 'Sudah Dijawab' ELSE 'Belum Dijawab' END as status")
       )
       .where('km.kd_dokter', doctorNik);
 

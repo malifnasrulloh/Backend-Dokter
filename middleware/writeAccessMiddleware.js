@@ -8,7 +8,7 @@ const writeAccessMiddleware = () => {
     const allowWrite = process.env.ALLOW_MOBILE_WRITE !== 'false';
     const method = c.req.method;
     const path = c.req.path;
-    const isExempted = path.endsWith('/pemeriksaan/validasi') || path.includes('/konsultasi');
+    const isExempted = path.endsWith('/pemeriksaan/validasi') || path.includes('/konsultasi') || path.includes('/dpjp-ranap');
 
     if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method) && !allowWrite && !isExempted) {
       const res = {

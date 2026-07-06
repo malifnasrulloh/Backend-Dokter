@@ -1,7 +1,7 @@
 const { streamSSE } = require('hono/streaming');
 const { logger } = require('../../middleware/logger');
 
-// Map NIK to a Set of active SSE streams (to support multiple active logins/devices per doctor)
+// Map NIK to a Set of active SSE streams
 const activeDoctorStreams = new Map();
 
 exports.sseNotificationConnection = async (c) => {
@@ -15,18 +15,20 @@ exports.sseNotificationConnection = async (c) => {
     if (!activeDoctorStreams.has(doctorNik)) {
       activeDoctorStreams.set(doctorNik, new Set());
     }
-    activeDoctorStreams.get(doctorNik).add(stream);
+    const streams = activeDoctorStreams.get(doctorNik);
+    streams.add(stream);
 
-    logger.info(`[SSE] Doctor ${doctorNik} connected to real-time notification stream`);
+    logger.info(`[SSE] Doctor ${doctorNik} connected. Total active streams: ${streams.size}`);
+
+    // FIX 2: Use a flag to break the keep-alive loop immediately on disconnect
+    let isAborted = false;
 
     stream.onAbort(() => {
-      logger.info(`[SSE] Doctor ${doctorNik} disconnected from real-time notification stream`);
-      const streams = activeDoctorStreams.get(doctorNik);
-      if (streams) {
-        streams.delete(stream);
-        if (streams.size === 0) {
-          activeDoctorStreams.delete(doctorNik);
-        }
+      isAborted = true;
+      logger.info(`[SSE] Doctor ${doctorNik} disconnected.`);
+      streams.delete(stream);
+      if (streams.size === 0) {
+        activeDoctorStreams.delete(doctorNik);
       }
     });
 
@@ -37,15 +39,18 @@ exports.sseNotificationConnection = async (c) => {
     });
 
     // Keep connection alive with periodic pings every 30 seconds
-    while (true) {
+    while (!isAborted) {
       await stream.sleep(30000);
+      if (isAborted) break; // Check flag immediately after waking up
+      
       try {
         await stream.writeSSE({
           event: 'ping',
           data: 'keep-alive'
         });
       } catch (err) {
-        break; // Stream was closed
+        // Stream was closed unexpectedly during write
+        break; 
       }
     }
   });
@@ -64,7 +69,7 @@ exports.sendNotification = async (targetNik, eventName, data) => {
     return false;
   }
 
-  logger.info(`[SSE] Broadcasting notification to ${targetNik} (event: ${eventName})`);
+  logger.info(`[SSE] Broadcasting to ${targetNik} (event: ${eventName}, streams: ${streams.size})`);
   const payload = JSON.stringify(data);
   const sendPromises = [];
 
@@ -74,7 +79,13 @@ exports.sendNotification = async (targetNik, eventName, data) => {
         event: eventName,
         data: payload
       }).catch((err) => {
-        logger.error(`[SSE] Failed writing notification stream payload for ${targetNik}:`, err);
+        logger.error(`[SSE] Failed writing to stream for ${targetNik}:`, err);
+        
+        // FIX 1: Clean up "zombie" streams that failed to write (silent disconnects)
+        streams.delete(stream);
+        if (streams.size === 0) {
+          activeDoctorStreams.delete(targetNik);
+        }
       })
     );
   }

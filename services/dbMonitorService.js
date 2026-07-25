@@ -6,9 +6,9 @@ const { logger } = require('../middleware/logger');
 /**
  * DB Monitor — Reliable timestamp-based polling for real-time notifications.
  *
- * Instead of MAX(col) comparisons (fragile on empty tables, string ordering),
- * uses DB NOW() as time window boundary each poll cycle.
- * This guarantees every row is detected regardless of prior table state.
+ * CRITICAL: All JOINs use LEFT JOIN so rows are NEVER silently dropped due
+ * to missing reference data (e.g. dokter/pegawai/pasien record missing).
+ * Fields from failed joins get fallback values so notifications always fire.
  */
 
 let lastPollTime = '';
@@ -45,6 +45,7 @@ async function poll() {
     const currentPollTime = nowRaw[0]?.now || '';
 
     // ── 1. New consultation requests (konsultasi_medik) ──
+    // NOTE: LEFT JOIN so missing dokter/pasien refs don't drop the row
     const newKm = await knex('konsultasi_medik as km')
       .select(
         'km.no_permintaan',
@@ -56,9 +57,9 @@ async function poll() {
         'dr_asal.nm_dokter as nm_dokter_asal',
         'p.nm_pasien'
       )
-      .innerJoin('dokter as dr_asal', 'km.kd_dokter', 'dr_asal.kd_dokter')
-      .innerJoin('reg_periksa as rp', 'km.no_rawat', 'rp.no_rawat')
-      .innerJoin('pasien as p', 'rp.no_rkm_medis', 'p.no_rkm_medis')
+      .leftJoin('dokter as dr_asal', 'km.kd_dokter', 'dr_asal.kd_dokter')
+      .leftJoin('reg_periksa as rp', 'km.no_rawat', 'rp.no_rawat')
+      .leftJoin('pasien as p', 'rp.no_rkm_medis', 'p.no_rkm_medis')
       .where('km.tanggal', '>', lastPollTime)
       .andWhere('km.tanggal', '<=', currentPollTime)
       .orderBy('km.tanggal', 'asc');
@@ -68,10 +69,10 @@ async function poll() {
       await sendNotification(row.kd_dokter_dikonsuli, 'consultation_request', {
         no_permintaan: row.no_permintaan,
         no_rawat: row.no_rawat,
-        nm_dokter_pemberi: row.nm_dokter_asal,
-        diagnosa_kerja: row.diagnosa_kerja,
-        uraian_konsultasi: row.uraian_konsultasi,
-        nm_pasien: row.nm_pasien,
+        nm_dokter_pemberi: row.nm_dokter_asal || 'System',
+        diagnosa_kerja: row.diagnosa_kerja || '',
+        uraian_konsultasi: row.uraian_konsultasi || '',
+        nm_pasien: row.nm_pasien || 'Unknown',
       });
     }
 
@@ -87,8 +88,8 @@ async function poll() {
         'p.nm_pasien'
       )
       .leftJoin('pegawai', 'kp.nip', 'pegawai.nik')
-      .innerJoin('reg_periksa as rp', 'kp.no_rawat', 'rp.no_rawat')
-      .innerJoin('pasien as p', 'rp.no_rkm_medis', 'p.no_rkm_medis')
+      .leftJoin('reg_periksa as rp', 'kp.no_rawat', 'rp.no_rawat')
+      .leftJoin('pasien as p', 'rp.no_rkm_medis', 'p.no_rkm_medis')
       .where('kp.tanggal', '>', lastPollTime)
       .andWhere('kp.tanggal', '<=', currentPollTime)
       .orderBy('kp.tanggal', 'asc');
@@ -99,8 +100,8 @@ async function poll() {
         no_permintaan: row.no_permintaan,
         no_rawat: row.no_rawat,
         nama_petugas: row.nama_petugas || 'Perawat',
-        situation: row.situation,
-        nm_pasien: row.nm_pasien,
+        situation: row.situation || '',
+        nm_pasien: row.nm_pasien || 'Unknown',
       });
     }
 
@@ -112,8 +113,8 @@ async function poll() {
         'km.kd_dokter as kd_dokter_peminta',
         'dr_tujuan.nm_dokter as nm_dokter_dikonsuli'
       )
-      .innerJoin('konsultasi_medik as km', 'jkm.no_permintaan', 'km.no_permintaan')
-      .innerJoin('dokter as dr_tujuan', 'km.kd_dokter_dikonsuli', 'dr_tujuan.kd_dokter')
+      .leftJoin('konsultasi_medik as km', 'jkm.no_permintaan', 'km.no_permintaan')
+      .leftJoin('dokter as dr_tujuan', 'km.kd_dokter_dikonsuli', 'dr_tujuan.kd_dokter')
       .where('jkm.tanggal', '>', lastPollTime)
       .andWhere('jkm.tanggal', '<=', currentPollTime)
       .orderBy('jkm.tanggal', 'asc');
@@ -125,14 +126,14 @@ async function poll() {
       logger.info(`[DB-Monitor] New consultation reply: ${row.no_permintaan} → dr ${row.kd_dokter_peminta}`);
       await sendNotification(row.kd_dokter_peminta, 'consultation_response', {
         no_permintaan: row.no_permintaan,
-        nm_dokter_dikonsuli: row.nm_dokter_dikonsuli,
+        nm_dokter_dikonsuli: row.nm_dokter_dikonsuli || 'Rekan Dokter',
       });
     }
 
     // ── 4. New registrations (reg_periksa) ──
     const newReg = await knex('reg_periksa as rp')
       .select('rp.no_rawat', 'rp.kd_dokter', 'p.nm_pasien')
-      .innerJoin('pasien as p', 'rp.no_rkm_medis', 'p.no_rkm_medis')
+      .leftJoin('pasien as p', 'rp.no_rkm_medis', 'p.no_rkm_medis')
       .where(
         knex.raw("STR_TO_DATE(CONCAT(rp.tgl_registrasi, ' ', rp.jam_reg), '%Y-%m-%d %H:%i:%s')"),
         '>',
@@ -150,7 +151,7 @@ async function poll() {
       logger.info(`[DB-Monitor] New registration: ${row.no_rawat} → dr ${row.kd_dokter}`);
       await sendNotification(row.kd_dokter, 'new_admission', {
         no_rawat: row.no_rawat,
-        nm_pasien: row.nm_pasien,
+        nm_pasien: row.nm_pasien || 'Pasien Baru',
       });
     }
 

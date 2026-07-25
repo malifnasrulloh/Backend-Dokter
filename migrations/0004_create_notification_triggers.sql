@@ -7,6 +7,9 @@
 -- dbMonitorService.js stays as safety net (dedup prevents double-send).
 -- ────────────────────────────────────────────────────────────────────
 
+SET @saved_log_bin_trust := @@session.log_bin_trust_function_creators;
+SET SESSION log_bin_trust_function_creators = 1;
+
 DELIMITER //
 
 -- ═════════════════════════════════════════════════════════════════════
@@ -167,3 +170,5 @@ BEGIN
 END//
 
 DELIMITER ;
+
+SET SESSION log_bin_trust_function_creators = @saved_log_bin_trust;

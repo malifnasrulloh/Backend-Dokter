@@ -37,9 +37,20 @@ async function runMigrations() {
         const filePath = path.join(migrationsDir, file);
         const sqlContent = fs.readFileSync(filePath, 'utf8');
 
-        // Pisahkan query berdasarkan titik koma ';' lalu eksekusi satu per satu.
-        const statements = sqlContent
-          .split(';')
+        // Pisahkan query berdasarkan delimiter.
+        // Default delimiter is ';', but a file may start with
+        // "DELIMITER //" to support trigger/procedure bodies that contain ';'.
+        let delimiter = ';';
+        let processedContent = sqlContent;
+        const delimiterMatch = sqlContent.match(/^DELIMITER\s+(\S+)/m);
+        if (delimiterMatch) {
+          delimiter = delimiterMatch[1];
+          // Remove DELIMITER lines from the content
+          processedContent = sqlContent.replace(/^DELIMITER\s+\S+\s*$/gm, '');
+        }
+
+        const statements = processedContent
+          .split(delimiter)
           .map((s) => s.trim())
           .filter((s) => s.length > 0);
 

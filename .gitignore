@@ -135,3 +135,4 @@ database_schema_dump.json
 .venv
 VersiJava/
 RME HVA+device.json
+*.zip

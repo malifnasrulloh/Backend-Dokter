@@ -12,6 +12,13 @@ CREATE TABLE IF NOT EXISTS notification_queue (
   INDEX idx_nik_created (nik, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Add source tracking + soft-delete columns for trigger-based cleanup
+ALTER TABLE notification_queue
+  ADD COLUMN IF NOT EXISTS source_table VARCHAR(50) DEFAULT NULL COMMENT 'Source table name (e.g. konsultasi_medik, permintaan_lab)',
+  ADD COLUMN IF NOT EXISTS source_pk VARCHAR(100) DEFAULT NULL COMMENT 'Source primary key value (e.g. no_permintaan, noorder, no_rawat)',
+  ADD COLUMN IF NOT EXISTS deleted_at DATETIME(3) DEFAULT NULL COMMENT 'Soft delete timestamp — set by AFTER DELETE triggers',
+  ADD INDEX IF NOT EXISTS idx_source (source_table, source_pk);
+
 -- ── notification_device_cursor ─────────────────────────────────────
 -- Tracks the last notification ID each device has acknowledged.
 -- Unique per (nik, device_id) so each device independently tracks cursor.

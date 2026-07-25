@@ -28,11 +28,12 @@ exports.pollNotifications = async (c) => {
 
     const lastReadId = cursorRows.length > 0 ? cursorRows[0].last_read_id : 0;
 
-    // Fetch pending notifications since cursor
+    // Fetch pending notifications since cursor (exclude soft-deleted)
     const notifications = await knex('notification_queue')
       .select('id', 'event_type', 'title', 'body', 'payload', 'created_at')
       .where('nik', nik)
       .andWhere('id', '>', lastReadId)
+      .andWhere('deleted_at', null)
       .orderBy('id', 'asc')
       .limit(50);
 

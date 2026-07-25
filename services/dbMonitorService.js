@@ -4,48 +4,83 @@ const { cleanOldNotifications } = require('./notificationQueueService');
 const { logger } = require('../middleware/logger');
 
 /**
- * DB Monitor — Reliable timestamp-based polling for real-time notifications.
+ * DB Monitor — Unconditional polling for real-time notifications.
  *
- * CRITICAL: All JOINs use LEFT JOIN so rows are NEVER silently dropped due
- * to missing reference data (e.g. dokter/pegawai/pasien record missing).
- * Fields from failed joins get fallback values so notifications always fire.
+ * Uses MAX(auto_increment id) to detect NEW rows in each source table.
+ * This is the ONLY approach that works regardless of:
+ * - What timestamp format the source app uses (CURDATE, NOW, etc.)
+ * - What timezone the source app uses
+ * - JOIN failures from missing reference data (LEFT JOIN handles this)
+ *
+ * In-memory dedup Sets prevent re-sending on restart or edge cases.
  */
 
-let lastPollTime = '';
+// ── Per-table tracking ──
+// Store the last-seen MAX(id) for each source table
+let lastMaxId = {
+  konsultasi_medik: 0,
+  konsultasi_perawat: 0,
+  jawaban_konsultasi_medik: 0,
+  reg_periksa: 0,
+};
+
+// Dedup Sets: populated at init, prevents re-sending across restarts
+const dedup = {
+  konsultasiMedik: new Set(),
+  konsultasiPerawat: new Set(),
+  jawabanKonsultasi: new Set(),
+  regPeriksa: new Set(),
+};
+
 let isPolling = false;
 
-// Dedup set for consultation responses (handles same-timestamp edge case)
-const processedJkmPermintaan = new Set();
+// ── Init ───────────────────────────────────────────────────────────
 
 async function init() {
   try {
-    // Use DB time as reference — eliminates clock skew between app & DB servers
-    const [nowRaw] = await knex.raw('SELECT NOW() as now');
-    lastPollTime = nowRaw[0]?.now || '';
+    // Pre-populate dedup with ALL existing rows so historical ones never fire
+    const populate = async (table, idColumn, destSet) => {
+      const rows = await knex(table).select(idColumn);
+      for (const r of rows) destSet.add(r[idColumn]);
+    };
 
-    // Pre-populate dedup set with existing responses so historical ones don't re-fire
-    const existing = await knex('jawaban_konsultasi_medik').select('no_permintaan');
-    for (const row of existing) {
-      processedJkmPermintaan.add(row.no_permintaan);
-    }
+    await Promise.all([
+      populate('konsultasi_medik', 'no_permintaan', dedup.konsultasiMedik),
+      populate('konsultasi_perawat', 'no_permintaan', dedup.konsultasiPerawat),
+      populate('jawaban_konsultasi_medik', 'no_permintaan', dedup.jawabanKonsultasi),
+      populate('reg_periksa', 'no_rawat', dedup.regPeriksa),
+    ]);
 
-    logger.info(`[DB-Monitor] Started. Tracking from ${lastPollTime} | ${existing.length} existing replies pre-loaded`);
+    // Get current MAX ids
+    const getMax = async (table, idCol) => {
+      const [row] = await knex(table).max(`${idCol} as mx`);
+      return row?.mx ?? 0;
+    };
+
+    lastMaxId.konsultasi_medik = await getMax('konsultasi_medik', 'no_permintaan');
+    lastMaxId.konsultasi_perawat = await getMax('konsultasi_perawat', 'no_permintaan');
+    lastMaxId.jawaban_konsultasi_medik = await getMax('jawaban_konsultasi_medik', 'no_permintaan');
+    lastMaxId.reg_periksa = await getMax('reg_periksa', 'no_rawat');
+
+    logger.info(`[DB-Monitor] Started. Dedup pre-loaded: KM=${dedup.konsultasiMedik.size} KP=${dedup.konsultasiPerawat.size} JKM=${dedup.jawabanKonsultasi.size} RP=${dedup.regPeriksa.size}`);
   } catch (err) {
     logger.error('[DB-Monitor] Init error:', err);
   }
 }
 
+// ── Poll ───────────────────────────────────────────────────────────
+
+/**
+ * Helper: fetch rows where string id > lastMax, with LEFT JOIN + fallbacks.
+ * Uses string comparison (no_permintaan / no_rawat) since those are the
+ * only available identifiers in these legacy tables (no numeric PK).
+ */
 async function poll() {
   if (isPolling) return;
   isPolling = true;
 
   try {
-    // Get current DB time as poll window upper bound
-    const [nowRaw] = await knex.raw('SELECT NOW() as now');
-    const currentPollTime = nowRaw[0]?.now || '';
-
     // ── 1. New consultation requests (konsultasi_medik) ──
-    // NOTE: LEFT JOIN so missing dokter/pasien refs don't drop the row
     const newKm = await knex('konsultasi_medik as km')
       .select(
         'km.no_permintaan',
@@ -60,11 +95,14 @@ async function poll() {
       .leftJoin('dokter as dr_asal', 'km.kd_dokter', 'dr_asal.kd_dokter')
       .leftJoin('reg_periksa as rp', 'km.no_rawat', 'rp.no_rawat')
       .leftJoin('pasien as p', 'rp.no_rkm_medis', 'p.no_rkm_medis')
-      .where('km.tanggal', '>', lastPollTime)
-      .andWhere('km.tanggal', '<=', currentPollTime)
-      .orderBy('km.tanggal', 'asc');
+      .where('km.no_permintaan', '>', lastMaxId.konsultasi_medik)
+      .orderBy('km.no_permintaan', 'asc');
 
     for (const row of newKm) {
+      if (dedup.konsultasiMedik.has(row.no_permintaan)) continue;
+      dedup.konsultasiMedik.add(row.no_permintaan);
+      lastMaxId.konsultasi_medik = row.no_permintaan;
+
       logger.info(`[DB-Monitor] New consultation: ${row.no_permintaan} → dr ${row.kd_dokter_dikonsuli}`);
       await sendNotification(row.kd_dokter_dikonsuli, 'consultation_request', {
         no_permintaan: row.no_permintaan,
@@ -90,11 +128,14 @@ async function poll() {
       .leftJoin('pegawai', 'kp.nip', 'pegawai.nik')
       .leftJoin('reg_periksa as rp', 'kp.no_rawat', 'rp.no_rawat')
       .leftJoin('pasien as p', 'rp.no_rkm_medis', 'p.no_rkm_medis')
-      .where('kp.tanggal', '>', lastPollTime)
-      .andWhere('kp.tanggal', '<=', currentPollTime)
-      .orderBy('kp.tanggal', 'asc');
+      .where('kp.no_permintaan', '>', lastMaxId.konsultasi_perawat)
+      .orderBy('kp.no_permintaan', 'asc');
 
     for (const row of newKp) {
+      if (dedup.konsultasiPerawat.has(row.no_permintaan)) continue;
+      dedup.konsultasiPerawat.add(row.no_permintaan);
+      lastMaxId.konsultasi_perawat = row.no_permintaan;
+
       logger.info(`[DB-Monitor] New SBAR: ${row.no_permintaan} → dr ${row.kd_dokter_dikonsuli}`);
       await sendNotification(row.kd_dokter_dikonsuli, 'sbar_request', {
         no_permintaan: row.no_permintaan,
@@ -115,13 +156,13 @@ async function poll() {
       )
       .leftJoin('konsultasi_medik as km', 'jkm.no_permintaan', 'km.no_permintaan')
       .leftJoin('dokter as dr_tujuan', 'km.kd_dokter_dikonsuli', 'dr_tujuan.kd_dokter')
-      .where('jkm.tanggal', '>', lastPollTime)
-      .andWhere('jkm.tanggal', '<=', currentPollTime)
-      .orderBy('jkm.tanggal', 'asc');
+      .where('jkm.no_permintaan', '>', lastMaxId.jawaban_konsultasi_medik)
+      .orderBy('jkm.no_permintaan', 'asc');
 
     for (const row of newJkm) {
-      if (processedJkmPermintaan.has(row.no_permintaan)) continue;
-      processedJkmPermintaan.add(row.no_permintaan);
+      if (dedup.jawabanKonsultasi.has(row.no_permintaan)) continue;
+      dedup.jawabanKonsultasi.add(row.no_permintaan);
+      lastMaxId.jawaban_konsultasi_medik = row.no_permintaan;
 
       logger.info(`[DB-Monitor] New consultation reply: ${row.no_permintaan} → dr ${row.kd_dokter_peminta}`);
       await sendNotification(row.kd_dokter_peminta, 'consultation_response', {
@@ -134,20 +175,14 @@ async function poll() {
     const newReg = await knex('reg_periksa as rp')
       .select('rp.no_rawat', 'rp.kd_dokter', 'p.nm_pasien')
       .leftJoin('pasien as p', 'rp.no_rkm_medis', 'p.no_rkm_medis')
-      .where(
-        knex.raw("STR_TO_DATE(CONCAT(rp.tgl_registrasi, ' ', rp.jam_reg), '%Y-%m-%d %H:%i:%s')"),
-        '>',
-        lastPollTime
-      )
-      .andWhere(
-        knex.raw("STR_TO_DATE(CONCAT(rp.tgl_registrasi, ' ', rp.jam_reg), '%Y-%m-%d %H:%i:%s')"),
-        '<=',
-        currentPollTime
-      )
-      .orderBy('rp.tgl_registrasi', 'asc')
-      .orderBy('rp.jam_reg', 'asc');
+      .where('rp.no_rawat', '>', lastMaxId.reg_periksa)
+      .orderBy('rp.no_rawat', 'asc');
 
     for (const row of newReg) {
+      if (dedup.regPeriksa.has(row.no_rawat)) continue;
+      dedup.regPeriksa.add(row.no_rawat);
+      lastMaxId.reg_periksa = row.no_rawat;
+
       logger.info(`[DB-Monitor] New registration: ${row.no_rawat} → dr ${row.kd_dokter}`);
       await sendNotification(row.kd_dokter, 'new_admission', {
         no_rawat: row.no_rawat,
@@ -155,15 +190,14 @@ async function poll() {
       });
     }
 
-    // Advance polling window
-    lastPollTime = currentPollTime;
-
   } catch (err) {
     logger.error('[DB-Monitor] Polling error:', err);
   } finally {
     isPolling = false;
   }
 }
+
+// ── Start ──────────────────────────────────────────────────────────
 
 function start() {
   init().then(() => {

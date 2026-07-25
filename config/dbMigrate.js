@@ -38,21 +38,30 @@ async function runMigrations() {
         const sqlContent = fs.readFileSync(filePath, 'utf8');
 
         // Pisahkan query berdasarkan delimiter.
-        // Default delimiter is ';', but a file may start with
-        // "DELIMITER //" to support trigger/procedure bodies that contain ';'.
-        let delimiter = ';';
-        let processedContent = sqlContent;
-        const delimiterMatch = sqlContent.match(/^DELIMITER\s+(\S+)/m);
-        if (delimiterMatch) {
-          delimiter = delimiterMatch[1];
-          // Remove DELIMITER lines from the content
-          processedContent = sqlContent.replace(/^DELIMITER\s+\S+\s*$/gm, '');
-        }
+        // Default delimiter is ';'. Files with DELIMITER // require special
+        // handling: everything before the first DELIMITER line is standard SQL
+        // (split by ;), everything after uses the custom delimiter.
+        let statements = [];
+        const delimiterLineMatch = sqlContent.match(/^DELIMITER\s+(\S+)\s*$/m);
+        if (delimiterLineMatch) {
+          const customDelim = delimiterLineMatch[1];
+          const delimiterLineIndex = sqlContent.indexOf(delimiterLineMatch[0]);
+          const beforeDelim = sqlContent.substring(0, delimiterLineIndex).trim();
+          const afterDelim = sqlContent.substring(delimiterLineIndex + delimiterLineMatch[0].length).trim();
 
-        const statements = processedContent
-          .split(delimiter)
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0);
+          // Part before DELIMITER: standard SQL split by ;
+          if (beforeDelim) {
+            statements.push(...beforeDelim.split(';').map(s => s.trim()).filter(s => s.length > 0));
+          }
+          // Part after DELIMITER: split by custom delimiter; remove other DELIMITER lines
+          const cleaned = afterDelim.replace(/^DELIMITER\s+\S+\s*$/gm, '');
+          if (cleaned) {
+            statements.push(...cleaned.split(customDelim).map(s => s.trim()).filter(s => s.length > 0));
+          }
+        } else {
+          // Standard file — split by ;
+          statements = sqlContent.split(';').map(s => s.trim()).filter(s => s.length > 0);
+        }
 
         const conn = await db.getConnection();
         try {

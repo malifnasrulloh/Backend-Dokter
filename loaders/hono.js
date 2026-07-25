@@ -79,8 +79,10 @@ const honoLimiter = async (c, next) => {
 };
 
 module.exports = (app, _corsOptions) => {
+  // Compression: SSE endpoints excluded (kept for Sse backward compat during migration)
   app.use('*', async (c, next) => {
-    if (c.req.header('accept') === 'text/event-stream' || c.req.path === '/api/notifications') {
+    // SSE streams must not be compressed
+    if (c.req.path === '/api/notifications' && c.req.header('accept') === 'text/event-stream') {
       return await next();
     }
     const compressMiddleware = compress({ threshold: 1024 });

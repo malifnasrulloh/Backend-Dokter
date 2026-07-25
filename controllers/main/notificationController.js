@@ -1,5 +1,6 @@
 const { streamSSE } = require('hono/streaming');
 const { logger } = require('../../middleware/logger');
+const { enqueueNotification } = require('../../services/notificationQueueService');
 
 // Map NIK to a Set of active SSE streams
 const activeDoctorStreams = new Map();
@@ -63,6 +64,14 @@ exports.sseNotificationConnection = async (c) => {
  * @param {object} data - The message payload object
  */
 exports.sendNotification = async (targetNik, eventName, data) => {
+  // Always persist to database queue (for Flutter polling)
+  try {
+    await enqueueNotification(targetNik, eventName, data);
+  } catch (err) {
+    logger.error(`[Notif-Queue] Failed to enqueue for ${targetNik}:`, err);
+  }
+
+  // Also try SSE broadcast for any connected live stream (backward compat)
   const streams = activeDoctorStreams.get(targetNik);
   if (!streams || streams.size === 0) {
     logger.info(`[SSE] Notification to ${targetNik} skipped (no active stream found)`);

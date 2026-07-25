@@ -109,7 +109,10 @@ router.use('/soap/*', validateTokenJWT);
 router.use('/soap/*', writeAccessMiddleware());
 router.route('/soap', require('../rekammedis/soapRoute'));
 
-// ── REAL-TIME NOTIFICATIONS (SSE) ─────────────────────────────────────────────
+  // ── NOTIFICATION QUEUE (DB-backed polling) ────────────────────────────────────
+  router.get('/notifications/poll', validateTokenJWT, require('../../controllers/main/notificationQueueController').pollNotifications);
+  router.post('/notifications/ack', validateTokenJWT, require('../../controllers/main/notificationQueueController').ackNotifications);
+  // DEPRECATED: SSE — kept for backward compat; remove after migration validated
 router.get('/notifications', validateTokenJWT, require('../../controllers/main/notificationController').sseNotificationConnection);
 
 // ── KONSULTASI MEDIK ──────────────────────────────────────────────────────────

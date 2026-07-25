@@ -1,5 +1,6 @@
 const knex = require('../config/knex');
 const { sendNotification } = require('../controllers/main/notificationController');
+const { cleanOldNotifications } = require('./notificationQueueService');
 const { logger } = require('../middleware/logger');
 
 /**
@@ -166,6 +167,12 @@ async function poll() {
 function start() {
   init().then(() => {
     setInterval(poll, 3000);
+    // Cleanup old notifications once per hour
+    setInterval(() => {
+      cleanOldNotifications(7).catch((err) => {
+        logger.error('[DB-Monitor] Cleanup error:', err);
+      });
+    }, 3600000);
   });
 }
 

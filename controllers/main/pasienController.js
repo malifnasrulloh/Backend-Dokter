@@ -122,3 +122,31 @@ exports.getPasienByNoRawat = async (req, res) => {
 
   return response.ok(res, formattedResults);
 };
+
+/**
+ * GET /pasien/cari-by-rawat?no_rawat=...
+ * Lightweight endpoint for notification routing.
+ */
+exports.cariByNoRawat = async (req, res) => {
+  const { no_rawat } = req.query;
+  if (!no_rawat) return response.badRequest(res, 'Parameter no_rawat wajib diisi');
+
+  try {
+    const [rows] = await db.query(`
+      SELECT
+        rp.no_rawat, rp.no_rkm_medis, rp.kd_dokter,
+        p.nm_pasien, rp.status_lanjut AS _type, pj.png_jawab
+      FROM reg_periksa rp
+      INNER JOIN pasien p ON rp.no_rkm_medis = p.no_rkm_medis
+      LEFT JOIN penjab pj ON rp.kd_pj = pj.kd_pj
+      WHERE rp.no_rawat = ?
+      LIMIT 1
+    `, [no_rawat]);
+
+    if (rows.length === 0) return response.noContent(res, 'Data pasien tidak ditemukan');
+    return response.ok(res, rows[0]);
+  } catch (error) {
+    logger.error('[Pasien] cariByNoRawat error:', error);
+    return response.internalError(req, res, error, 'Gagal mencari data pasien');
+  }
+};

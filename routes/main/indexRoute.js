@@ -76,6 +76,9 @@ router.route('/list-pasien-igd', require('./listPasienIGDRoute'));
 router.use('/jadwal/*', validateTokenJWT);
 router.route('/jadwal', require('./jadwalRoute'));
 
+// ── PASIEN DETAIL (Lightweight — for notification routing) ────────────────────
+router.get('/pasien/cari-by-rawat', validateTokenJWT, require('../../controllers/main/pasienController').cariByNoRawat);
+
 const writeAccessMiddleware = require('../../middleware/writeAccessMiddleware');
 
 // ── DPJP RANAP ───────────────────────────────────────────────────────────────

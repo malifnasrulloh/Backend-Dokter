@@ -1,9 +1,10 @@
 -- =============================================================
 -- NOTIFICATION QUEUE SETUP + ALL TRIGGERS for E-Dokter
 -- =============================================================
--- Database: sik_bedah (source tables + notification_queue)
+-- Database: sik (source tables + notification_queue)
 -- Import:
---   mysql -u root -p sik_bedah < setup_notification_triggers.sql
+--   mysql -u root -p sik < setup_notification_triggers.sql
+--   (Source tables live in `sik`; notification_queue is in `sik`)
 -- =============================================================
 
 -- ──────────────────────────────────────────────────────────────
@@ -48,7 +49,7 @@ BEGIN
     SET v_body = CONCAT('Permintaan konsultasi dari ', v_nm_dokter, ': "', COALESCE(NEW.diagnosa_kerja, ''), '"');
   END IF;
 
-  INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+  INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   VALUES (
     NEW.kd_dokter_dikonsuli, v_event_type, v_title, v_body,
     JSON_OBJECT('no_permintaan', NEW.no_permintaan, 'no_rawat', NEW.no_rawat,
@@ -67,7 +68,7 @@ CREATE TRIGGER trg_notify_del_konsultasi_medik
 AFTER DELETE ON konsultasi_medik
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'konsultasi_medik'
     AND source_pk = OLD.no_permintaan
@@ -94,7 +95,7 @@ BEGIN
   LEFT JOIN pasien p ON p.no_rkm_medis = rp.no_rkm_medis
   WHERE rp.no_rawat = NEW.no_rawat LIMIT 1;
 
-  INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+  INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   VALUES (
     NEW.kd_dokter_dikonsuli, 'sbar_request', 'Permintaan SBAR Baru',
     CONCAT('Laporan dari ', v_nama_petugas, ': "', COALESCE(NEW.situation, ''), '"'),
@@ -114,7 +115,7 @@ CREATE TRIGGER trg_notify_del_konsultasi_perawat
 AFTER DELETE ON konsultasi_perawat
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'konsultasi_perawat'
     AND source_pk = OLD.no_permintaan
@@ -140,7 +141,7 @@ BEGIN
   WHERE km.no_permintaan = NEW.no_permintaan LIMIT 1;
 
   IF v_kd_peminta IS NOT NULL THEN
-    INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+    INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
     VALUES (v_kd_peminta, 'consultation_response', 'Konsultasi Dijawab',
       CONCAT('Balasan dari ', v_nm_dokter, ' untuk permintaan ', NEW.no_permintaan),
       JSON_OBJECT('no_permintaan', NEW.no_permintaan, 'nm_dokter_dikonsuli', v_nm_dokter),
@@ -157,7 +158,7 @@ CREATE TRIGGER trg_notify_del_jawaban_konsultasi_medik
 AFTER DELETE ON jawaban_konsultasi_medik
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'jawaban_konsultasi_medik'
     AND source_pk = OLD.no_permintaan
@@ -177,7 +178,7 @@ BEGIN
   SELECT COALESCE(nm_pasien, 'Pasien Baru') INTO v_nm_pasien
   FROM pasien WHERE no_rkm_medis = NEW.no_rkm_medis LIMIT 1;
 
-  INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+  INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   VALUES (NEW.kd_dokter, 'new_admission', 'Pasien Baru Terdaftar',
     CONCAT('Anda telah didelegasikan sebagai DPJP untuk ', v_nm_pasien, ' (', NEW.no_rawat, ')'),
     JSON_OBJECT('no_rawat', NEW.no_rawat, 'nm_pasien', v_nm_pasien),
@@ -193,7 +194,7 @@ CREATE TRIGGER trg_notify_del_reg_periksa
 AFTER DELETE ON reg_periksa
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'reg_periksa'
     AND source_pk = OLD.no_rawat
@@ -219,7 +220,7 @@ BEGIN
   FROM reg_periksa rp LEFT JOIN pasien p ON p.no_rkm_medis = rp.no_rkm_medis
   WHERE rp.no_rawat = NEW.no_rawat LIMIT 1;
 
-  INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+  INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   VALUES (
     NEW.dokter_perujuk, 'lab_request', 'Permintaan Laboratorium Baru',
     CONCAT('Permintaan lab untuk ', v_nm_pasien, ' (', NEW.no_rawat, ')'),
@@ -236,7 +237,7 @@ CREATE TRIGGER trg_notify_del_permintaan_lab
 AFTER DELETE ON permintaan_lab
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'permintaan_lab' AND source_pk = OLD.noorder AND deleted_at IS NULL;
 END//
@@ -256,7 +257,7 @@ BEGIN
   FROM reg_periksa rp LEFT JOIN pasien p ON p.no_rkm_medis = rp.no_rkm_medis
   WHERE rp.no_rawat = NEW.no_rawat LIMIT 1;
 
-  INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+  INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   VALUES (
     NEW.dokter_perujuk, 'labpa_request', 'Permintaan PA Baru',
     CONCAT('Permintaan Patologi Anatomi untuk ', v_nm_pasien, ' (', NEW.no_rawat, ')'),
@@ -272,7 +273,7 @@ CREATE TRIGGER trg_notify_del_permintaan_labpa
 AFTER DELETE ON permintaan_labpa
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'permintaan_labpa' AND source_pk = OLD.noorder AND deleted_at IS NULL;
 END//
@@ -292,7 +293,7 @@ BEGIN
   FROM reg_periksa rp LEFT JOIN pasien p ON p.no_rkm_medis = rp.no_rkm_medis
   WHERE rp.no_rawat = NEW.no_rawat LIMIT 1;
 
-  INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+  INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   VALUES (
     NEW.dokter_perujuk, 'labmb_request', 'Permintaan Lab MB Baru',
     CONCAT('Permintaan laboratorium molekuler untuk ', v_nm_pasien, ' (', NEW.no_rawat, ')'),
@@ -308,7 +309,7 @@ CREATE TRIGGER trg_notify_del_permintaan_labmb
 AFTER DELETE ON permintaan_labmb
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'permintaan_labmb' AND source_pk = OLD.noorder AND deleted_at IS NULL;
 END//
@@ -332,7 +333,7 @@ BEGIN
   FROM reg_periksa rp LEFT JOIN pasien p ON p.no_rkm_medis = rp.no_rkm_medis
   WHERE rp.no_rawat = NEW.no_rawat LIMIT 1;
 
-  INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+  INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   VALUES (
     NEW.dokter_perujuk, 'radiology_request', 'Permintaan Radiologi Baru',
     CONCAT('Permintaan radiologi untuk ', v_nm_pasien, ' (', NEW.no_rawat, ')'),
@@ -349,7 +350,7 @@ CREATE TRIGGER trg_notify_del_permintaan_radiologi
 AFTER DELETE ON permintaan_radiologi
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'permintaan_radiologi' AND source_pk = OLD.noorder AND deleted_at IS NULL;
 END//
@@ -370,7 +371,7 @@ BEGIN
   FROM reg_periksa rp LEFT JOIN pasien p ON p.no_rkm_medis = rp.no_rkm_medis
   WHERE rp.no_rawat = NEW.no_rawat LIMIT 1;
 
-  INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+  INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   VALUES (
     NEW.kd_dokter, 'discharge_prescription', 'Resep Pulang Baru',
     CONCAT('Resep pulang untuk ', v_nm_pasien, ' (', NEW.no_permintaan, ')'),
@@ -387,7 +388,7 @@ AFTER UPDATE ON permintaan_resep_pulang
 FOR EACH ROW
 BEGIN
   IF NEW.status <> OLD.status THEN
-    INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+    INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
     VALUES (
       NEW.kd_dokter,
       CASE WHEN NEW.status = 'Sudah' THEN 'prescription_dispensed' ELSE 'prescription_updated' END,
@@ -405,7 +406,7 @@ CREATE TRIGGER trg_notify_del_permintaan_resep_pulang
 AFTER DELETE ON permintaan_resep_pulang
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'permintaan_resep_pulang' AND source_pk = OLD.no_permintaan AND deleted_at IS NULL;
 END//
@@ -422,7 +423,7 @@ BEGIN
   FROM reg_periksa rp LEFT JOIN pasien p ON p.no_rkm_medis = rp.no_rkm_medis
   WHERE rp.no_rawat = NEW.no_rawat LIMIT 1;
 
-  INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+  INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   VALUES (
     NEW.kd_dokter, 'medication_stock_request', 'Stok Obat Pasien',
     CONCAT('Permintaan stok obat untuk ', v_nm_pasien, ' (', NEW.no_permintaan, ')'),
@@ -439,7 +440,7 @@ AFTER UPDATE ON permintaan_stok_obat_pasien
 FOR EACH ROW
 BEGIN
   IF NEW.status <> OLD.status THEN
-    INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+    INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
     VALUES (
       NEW.kd_dokter,
       CASE WHEN NEW.status = 'Sudah' THEN 'medication_dispensed' ELSE 'medication_stock_updated' END,
@@ -457,7 +458,7 @@ CREATE TRIGGER trg_notify_del_permintaan_stok_obat_pasien
 AFTER DELETE ON permintaan_stok_obat_pasien
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'permintaan_stok_obat_pasien' AND source_pk = OLD.no_permintaan AND deleted_at IS NULL;
 END//
@@ -478,7 +479,7 @@ BEGIN
   FROM reg_periksa rp LEFT JOIN pasien p ON p.no_rkm_medis = rp.no_rkm_medis
   WHERE rp.no_rawat = NEW.no_rawat LIMIT 1;
 
-  INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+  INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   VALUES (
     NEW.kd_dokter, 'spiritual_guidance_request', 'Bimbingan Rohani',
     CONCAT('Bimbingan rohani untuk ', v_nm_pasien, ' (', NEW.no_rawat, ') — ', COALESCE(NEW.jns_pelayanan, '')),
@@ -495,7 +496,7 @@ CREATE TRIGGER trg_notify_del_permintaan_binrohtal
 AFTER DELETE ON permintaan_binrohtal
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'permintaan_binrohtal' AND source_pk = OLD.no_surat AND deleted_at IS NULL;
 END//
@@ -512,7 +513,7 @@ BEGIN
   FROM reg_periksa rp LEFT JOIN pasien p ON p.no_rkm_medis = rp.no_rkm_medis
   WHERE rp.no_rawat = NEW.no_rawat LIMIT 1;
 
-  INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+  INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   VALUES (
     NEW.kd_dokter, 'second_opinion_request', 'Second Opinion',
     CONCAT('Second opinion untuk ', v_nm_pasien, ' oleh ', COALESCE(NEW.pembuat_pernyataan, '')),
@@ -528,7 +529,7 @@ CREATE TRIGGER trg_notify_del_surat_permintaan_second_opinion
 AFTER DELETE ON surat_permintaan_second_opinion
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'surat_permintaan_second_opinion' AND source_pk = OLD.no_pernyataan AND deleted_at IS NULL;
 END//
@@ -545,7 +546,7 @@ BEGIN
   FROM reg_periksa rp LEFT JOIN pasien p ON p.no_rkm_medis = rp.no_rkm_medis
   WHERE rp.no_rawat = NEW.no_rawat LIMIT 1;
 
-  INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+  INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   VALUES (
     NEW.kd_dokter, 'surgery_booking', 'Booking Operasi Baru',
     CONCAT('Booking operasi untuk ', v_nm_pasien, ' pada ', COALESCE(NEW.tanggal, '')),
@@ -562,7 +563,7 @@ CREATE TRIGGER trg_notify_del_booking_operasi
 AFTER DELETE ON booking_operasi
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'booking_operasi'
     AND source_pk = CONCAT(OLD.no_rawat, '-', OLD.kode_paket, '-', COALESCE(OLD.tanggal, ''))
@@ -586,7 +587,7 @@ BEGIN
   WHERE rp.no_rawat = NEW.no_rawat LIMIT 1;
 
   IF v_kd_dokter IS NOT NULL THEN
-    INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+    INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
     VALUES (v_kd_dokter, 'bed_request', 'Permintaan Rawat Inap',
       CONCAT('Permintaan ranap untuk ', v_nm_pasien, ' (', NEW.no_rawat, ') — ', COALESCE(NEW.diagnosa, '')),
       JSON_OBJECT('no_rawat', NEW.no_rawat, 'nm_pasien', v_nm_pasien,
@@ -601,7 +602,7 @@ CREATE TRIGGER trg_notify_del_permintaan_ranap
 AFTER DELETE ON permintaan_ranap
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'permintaan_ranap' AND source_pk = OLD.no_rawat AND deleted_at IS NULL;
 END//
@@ -623,7 +624,7 @@ BEGIN
   WHERE rp.no_rawat = NEW.no_rawat LIMIT 1;
 
   IF v_kd_dokter IS NOT NULL THEN
-    INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+    INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
     VALUES (v_kd_dokter, 'medication_request', 'Permintaan Obat',
       CONCAT('Permintaan obat untuk ', v_nm_pasien, ' (', NEW.no_rawat, ')'),
       JSON_OBJECT('no_rawat', NEW.no_rawat, 'nm_pasien', v_nm_pasien,
@@ -638,7 +639,7 @@ CREATE TRIGGER trg_notify_del_permintaan_obat
 AFTER DELETE ON permintaan_obat
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'permintaan_obat'
     AND source_pk = CONCAT(OLD.tanggal, '-', OLD.jam, '-', OLD.no_rawat, '-', OLD.kode_brng)
@@ -659,7 +660,7 @@ BEGIN
   DECLARE v_nama VARCHAR(100);
   SELECT COALESCE(nama, 'Pegawai') INTO v_nama FROM pegawai WHERE nik = NEW.nip LIMIT 1;
 
-  INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+  INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   VALUES (
     NEW.nip, 'kitchen_request', 'Permintaan Dapur Baru',
     CONCAT('Permintaan dapur oleh ', v_nama, ' (', NEW.no_permintaan, ')'),
@@ -676,7 +677,7 @@ AFTER UPDATE ON permintaan_dapur
 FOR EACH ROW
 BEGIN
   IF NEW.status <> OLD.status THEN
-    INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+    INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
     SELECT
       NEW.nip,
       CASE
@@ -702,7 +703,7 @@ CREATE TRIGGER trg_notify_del_permintaan_dapur
 AFTER DELETE ON permintaan_dapur
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'permintaan_dapur' AND source_pk = OLD.no_permintaan AND deleted_at IS NULL;
 END//
@@ -717,7 +718,7 @@ BEGIN
   DECLARE v_nama VARCHAR(100);
   SELECT COALESCE(nama, 'Pegawai') INTO v_nama FROM pegawai WHERE nik = NEW.nip LIMIT 1;
 
-  INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+  INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   VALUES (
     NEW.nip, 'medical_supply_request', 'Barang Medis',
     CONCAT('Permintaan barang medis oleh ', v_nama, ' (', NEW.no_permintaan, ')'),
@@ -734,7 +735,7 @@ AFTER UPDATE ON permintaan_medis
 FOR EACH ROW
 BEGIN
   IF NEW.status <> OLD.status THEN
-    INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+    INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
     SELECT
       NEW.nip,
       CASE
@@ -760,7 +761,7 @@ CREATE TRIGGER trg_notify_del_permintaan_medis
 AFTER DELETE ON permintaan_medis
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'permintaan_medis' AND source_pk = OLD.no_permintaan AND deleted_at IS NULL;
 END//
@@ -775,7 +776,7 @@ BEGIN
   DECLARE v_nama VARCHAR(100);
   SELECT COALESCE(nama, 'Pegawai') INTO v_nama FROM pegawai WHERE nik = NEW.nip LIMIT 1;
 
-  INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+  INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   VALUES (
     NEW.nip, 'non_medical_request', 'Non Medis',
     CONCAT('Permintaan non medis oleh ', v_nama, ' (', NEW.no_permintaan, ')'),
@@ -792,7 +793,7 @@ AFTER UPDATE ON permintaan_non_medis
 FOR EACH ROW
 BEGIN
   IF NEW.status <> OLD.status THEN
-    INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+    INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
     SELECT
       NEW.nip,
       CASE
@@ -818,7 +819,7 @@ CREATE TRIGGER trg_notify_del_permintaan_non_medis
 AFTER DELETE ON permintaan_non_medis
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'permintaan_non_medis' AND source_pk = OLD.no_permintaan AND deleted_at IS NULL;
 END//
@@ -833,7 +834,7 @@ BEGIN
   DECLARE v_nama VARCHAR(100);
   SELECT COALESCE(nama, 'Pegawai') INTO v_nama FROM pegawai WHERE nik = NEW.nik LIMIT 1;
 
-  INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+  INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   VALUES (
     NEW.nik, 'inventory_repair_request', 'Perbaikan Inventaris',
     CONCAT('Permintaan perbaikan ', COALESCE(NEW.no_inventaris, ''), ': ', COALESCE(NEW.deskripsi_kerusakan, '')),
@@ -849,7 +850,7 @@ CREATE TRIGGER trg_notify_del_permintaan_perbaikan_inventaris
 AFTER DELETE ON permintaan_perbaikan_inventaris
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'permintaan_perbaikan_inventaris' AND source_pk = OLD.no_permintaan AND deleted_at IS NULL;
 END//
@@ -861,7 +862,7 @@ CREATE TRIGGER trg_notify_surat_perlindungan_kekerasan
 AFTER INSERT ON surat_perlindungan_dari_kekerasan
 FOR EACH ROW
 BEGIN
-  INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+  INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   VALUES (
     NEW.nip, 'violence_protection_letter', 'Perlindungan Kekerasan',
     CONCAT('Surat perlindungan untuk ', COALESCE(NEW.no_rawat, '')),
@@ -876,7 +877,7 @@ CREATE TRIGGER trg_notify_del_surat_perlindungan_kekerasan
 AFTER DELETE ON surat_perlindungan_dari_kekerasan
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'surat_perlindungan_dari_kekerasan' AND source_pk = OLD.no_surat AND deleted_at IS NULL;
 END//
@@ -892,7 +893,7 @@ CREATE TRIGGER trg_notify_pengajuan_cuti
 AFTER INSERT ON pengajuan_cuti
 FOR EACH ROW
 BEGIN
-  INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+  INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   SELECT
     combined.nik,
     'leave_application',
@@ -916,7 +917,7 @@ AFTER UPDATE ON pengajuan_cuti
 FOR EACH ROW
 BEGIN
   IF NEW.status <> OLD.status THEN
-    INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+    INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
     SELECT
       combined.nik,
       CASE
@@ -946,7 +947,7 @@ CREATE TRIGGER trg_notify_del_pengajuan_cuti
 AFTER DELETE ON pengajuan_cuti
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'pengajuan_cuti' AND source_pk = OLD.no_pengajuan AND deleted_at IS NULL;
 END//
@@ -958,7 +959,7 @@ CREATE TRIGGER trg_notify_pengajuan_inventaris
 AFTER INSERT ON pengajuan_inventaris
 FOR EACH ROW
 BEGIN
-  INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+  INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   SELECT
     combined.nik,
     'inventory_application',
@@ -982,7 +983,7 @@ AFTER UPDATE ON pengajuan_inventaris
 FOR EACH ROW
 BEGIN
   IF NEW.status <> OLD.status THEN
-    INSERT INTO notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+    INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
     SELECT
       combined.nik,
       CASE
@@ -1012,7 +1013,7 @@ CREATE TRIGGER trg_notify_del_pengajuan_inventaris
 AFTER DELETE ON pengajuan_inventaris
 FOR EACH ROW
 BEGIN
-  UPDATE notification_queue
+  UPDATE sik.notification_queue
   SET deleted_at = NOW(3)
   WHERE source_table = 'pengajuan_inventaris' AND source_pk = OLD.no_pengajuan AND deleted_at IS NULL;
 END//

@@ -156,6 +156,19 @@ async function enqueueNotification(targetNik, eventName, data) {
       title = 'Inventaris Ditolak';
       body = `Pengajuan inventaris ${data?.no_pengajuan || ''} ditolak`;
       break;
+    // ── INA-CBG Billing Threshold ──
+    case 'billing_threshold_80':
+      title = 'Biaya Mendekati Batas CBG';
+      body = `Biaya pasien ${data?.nm_pasien || 'Unknown'} (${data?.no_rawat || ''}) telah mencapai 80% dari tarif CBG`;
+      break;
+    case 'billing_threshold_100':
+      title = 'Biaya Mencapai Batas CBG';
+      body = `Biaya pasien ${data?.nm_pasien || 'Unknown'} (${data?.no_rawat || ''}) telah mencapai 100% dari tarif CBG`;
+      break;
+    case 'billing_threshold_120':
+      title = 'Biaya Melebihi Batas CBG';
+      body = `Biaya pasien ${data?.nm_pasien || 'Unknown'} (${data?.no_rawat || ''}) telah melebihi 120% dari tarif CBG`;
+      break;
     case 'leave_approved_manajemen':
       title = 'Cuti Disetujui (Manajemen)';
       body = `Pengajuan cuti ${data?.no_pengajuan || ''} telah disetujui oleh manajemen`;

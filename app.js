@@ -17,6 +17,10 @@ async function startServer() {
   const dbMonitor = require('./services/dbMonitorService');
   dbMonitor.start();
 
+  // Start INA-CBG billing threshold monitor
+  const inacbgMonitor = require('./services/inacbgMonitorService');
+  inacbgMonitor.start();
+
   process.on('uncaughtException', (error) => {
     logger.error(`Uncaught Exception: ${error.message}\n${error.stack}`);
   });

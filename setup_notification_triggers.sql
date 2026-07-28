@@ -11,6 +11,7 @@
 -- ALL TRIGGERS use DELIMITER for BEGIN...END consistency
 -- ──────────────────────────────────────────────────────────────
 DELIMITER //
+DELIMITER //
 
 -- ==============================================================
 -- A. EXISTING TRIGGERS (recreated with source_table, source_pk)

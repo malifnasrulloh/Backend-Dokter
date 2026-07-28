@@ -28,7 +28,7 @@ async function enqueueNotification(targetNik, eventName, data) {
       break;
     case 'sbar_request':
       title = 'Permintaan SBAR Baru';
-      body = `Laporan dari ${data?.nama_petugas || 'Perawat'}: "${data?.situation || ''}"`;
+      body = `S: ${data?.situation || ''}\nB: ${data?.background || ''}\nA: ${data?.assessment || ''}\nR: ${data?.recomendation || ''}`;
       break;
     // ── B. Laboratory ──
     case 'lab_request':
@@ -155,6 +155,14 @@ async function enqueueNotification(targetNik, eventName, data) {
     case 'inventory_rejected':
       title = 'Inventaris Ditolak';
       body = `Pengajuan inventaris ${data?.no_pengajuan || ''} ditolak`;
+      break;
+    case 'leave_approved_manajemen':
+      title = 'Cuti Disetujui (Manajemen)';
+      body = `Pengajuan cuti ${data?.no_pengajuan || ''} telah disetujui oleh manajemen`;
+      break;
+    case 'leave_rejected_manajemen':
+      title = 'Cuti Ditolak (Manajemen)';
+      body = `Pengajuan cuti ${data?.no_pengajuan || ''} ditolak oleh manajemen`;
       break;
     default:
       title = eventName;

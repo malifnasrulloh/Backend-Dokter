@@ -98,9 +98,11 @@ BEGIN
   INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   VALUES (
     NEW.kd_dokter_dikonsuli, 'sbar_request', 'Permintaan SBAR Baru',
-    CONCAT('Laporan dari ', v_nama_petugas, ': "', COALESCE(NEW.situation, ''), '"'),
+    CONCAT('S: ', COALESCE(NEW.situation, ''), '\nB: ', COALESCE(NEW.background, ''), '\nA: ', COALESCE(NEW.assessment, ''), '\nR: ', COALESCE(NEW.recomendation, '')),
     JSON_OBJECT('no_permintaan', NEW.no_permintaan, 'no_rawat', NEW.no_rawat,
-                'nama_petugas', v_nama_petugas, 'situation', NEW.situation,
+                'nama_petugas', v_nama_petugas,
+                'situation', NEW.situation, 'background', NEW.background,
+                'assessment', NEW.assessment, 'recomendation', NEW.recomendation,
                 'nm_pasien', v_nm_pasien),
     NOW(3), 'konsultasi_perawat', NEW.no_permintaan
   );
@@ -221,14 +223,15 @@ BEGIN
   WHERE rp.no_rawat = NEW.no_rawat LIMIT 1;
 
   INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
-  VALUES (
-    NEW.dokter_perujuk, 'lab_request', 'Permintaan Laboratorium Baru',
+  SELECT
+    pj.kd_dokterlab, 'lab_request', 'Permintaan Laboratorium Baru',
     CONCAT('Permintaan lab untuk ', v_nm_pasien, ' (', NEW.no_rawat, ')'),
     JSON_OBJECT('noorder', NEW.noorder, 'no_rawat', NEW.no_rawat,
                 'nm_dokter', v_nm_dokter, 'nm_pasien', v_nm_pasien,
                 'diagnosa_klinis', NEW.diagnosa_klinis),
     NOW(3), 'permintaan_lab', NEW.noorder
-  );
+  FROM set_pjlab pj
+  LIMIT 1;
 END//
 
 DROP TRIGGER IF EXISTS trg_notify_del_permintaan_lab//
@@ -258,13 +261,14 @@ BEGIN
   WHERE rp.no_rawat = NEW.no_rawat LIMIT 1;
 
   INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
-  VALUES (
-    NEW.dokter_perujuk, 'labpa_request', 'Permintaan PA Baru',
+  SELECT
+    pj.kd_dokterlabpa, 'labpa_request', 'Permintaan PA Baru',
     CONCAT('Permintaan Patologi Anatomi untuk ', v_nm_pasien, ' (', NEW.no_rawat, ')'),
     JSON_OBJECT('noorder', NEW.noorder, 'no_rawat', NEW.no_rawat,
                 'nm_dokter', v_nm_dokter, 'nm_pasien', v_nm_pasien),
     NOW(3), 'permintaan_labpa', NEW.noorder
-  );
+  FROM set_pjlab pj
+  LIMIT 1;
 END//
 
 DROP TRIGGER IF EXISTS trg_notify_del_permintaan_labpa//
@@ -294,13 +298,14 @@ BEGIN
   WHERE rp.no_rawat = NEW.no_rawat LIMIT 1;
 
   INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
-  VALUES (
-    NEW.dokter_perujuk, 'labmb_request', 'Permintaan Lab MB Baru',
+  SELECT
+    pj.kd_dokterlabmb, 'labmb_request', 'Permintaan Lab MB Baru',
     CONCAT('Permintaan laboratorium molekuler untuk ', v_nm_pasien, ' (', NEW.no_rawat, ')'),
     JSON_OBJECT('noorder', NEW.noorder, 'no_rawat', NEW.no_rawat,
                 'nm_dokter', v_nm_dokter, 'nm_pasien', v_nm_pasien),
     NOW(3), 'permintaan_labmb', NEW.noorder
-  );
+  FROM set_pjlab pj
+  LIMIT 1;
 END//
 
 DROP TRIGGER IF EXISTS trg_notify_del_permintaan_labmb//
@@ -334,14 +339,15 @@ BEGIN
   WHERE rp.no_rawat = NEW.no_rawat LIMIT 1;
 
   INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
-  VALUES (
-    NEW.dokter_perujuk, 'radiology_request', 'Permintaan Radiologi Baru',
+  SELECT
+    pj.kd_dokterrad, 'radiology_request', 'Permintaan Radiologi Baru',
     CONCAT('Permintaan radiologi untuk ', v_nm_pasien, ' (', NEW.no_rawat, ')'),
     JSON_OBJECT('noorder', NEW.noorder, 'no_rawat', NEW.no_rawat,
                 'nm_dokter', v_nm_dokter, 'nm_pasien', v_nm_pasien,
                 'diagnosa_klinis', NEW.diagnosa_klinis),
     NOW(3), 'permintaan_radiologi', NEW.noorder
-  );
+  FROM set_pjlab pj
+  LIMIT 1;
 END//
 
 DROP TRIGGER IF EXISTS trg_notify_del_permintaan_radiologi//
@@ -886,7 +892,7 @@ END//
 -- G. HR & ADMIN APPLICATIONS (dual-notify creator + approver)
 -- ==============================================================
 
--- G1. pengajuan_cuti → leave_application (INSERT - dual notify) ──
+-- G1. pengajuan_cuti → leave_application (INSERT - notify only nik_pj) ──
 DROP TRIGGER IF EXISTS trg_notify_pengajuan_cuti//
 
 CREATE TRIGGER trg_notify_pengajuan_cuti
@@ -895,19 +901,16 @@ FOR EACH ROW
 BEGIN
   INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   SELECT
-    combined.nik,
+    NEW.nik_pj,
     'leave_application',
     'Pengajuan Cuti Baru',
     CONCAT(COALESCE(pw.nama, 'Pegawai'), ' mengajukan cuti'),
     JSON_OBJECT('no_pengajuan', NEW.no_pengajuan, 'nama_pegawai', COALESCE(pw.nama, ''),
                 'status', NEW.status, 'tanggal_awal', NEW.tanggal_awal, 'tanggal_akhir', NEW.tanggal_akhir),
     NOW(3), 'pengajuan_cuti', NEW.no_pengajuan
-  FROM (
-    SELECT NEW.nik AS nik
-    UNION ALL
-    SELECT NEW.nik_pj
-  ) combined
-  LEFT JOIN pegawai pw ON pw.nik = combined.nik;
+  FROM pegawai pw
+  WHERE pw.nik = NEW.nik
+  LIMIT 1;
 END//
 
 DROP TRIGGER IF EXISTS trg_notify_upd_pengajuan_cuti//
@@ -919,7 +922,7 @@ BEGIN
   IF NEW.status <> OLD.status THEN
     INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
     SELECT
-      combined.nik,
+      NEW.nik,
       CASE
         WHEN NEW.status = 'Disetujui' THEN 'leave_approved'
         WHEN NEW.status = 'Ditolak' THEN 'leave_rejected'
@@ -933,11 +936,35 @@ BEGIN
       CONCAT('Pengajuan cuti ', NEW.no_pengajuan, ': ', NEW.status),
       JSON_OBJECT('no_pengajuan', NEW.no_pengajuan, 'status', NEW.status),
       NOW(3), 'pengajuan_cuti', NEW.no_pengajuan
-    FROM (
-      SELECT NEW.nik AS nik
-      UNION ALL
-      SELECT NEW.nik_pj
-    ) combined;
+    FROM (SELECT 1) dummy;
+  END IF;
+END//
+
+-- ── G1m. pengajuan_cuti status_manajemen → HR approval ─────────
+DROP TRIGGER IF EXISTS trg_notify_upd_pengajuan_cuti_manajemen//
+
+CREATE TRIGGER trg_notify_upd_pengajuan_cuti_manajemen
+AFTER UPDATE ON pengajuan_cuti
+FOR EACH ROW
+BEGIN
+  IF NEW.status_manajemen <> OLD.status_manajemen THEN
+    INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+    SELECT
+      NEW.nik,
+      CASE
+        WHEN NEW.status_manajemen = 'Disetujui' THEN 'leave_approved_manajemen'
+        WHEN NEW.status_manajemen = 'Ditolak' THEN 'leave_rejected_manajemen'
+        ELSE 'leave_manajemen_updated'
+      END,
+      CASE
+        WHEN NEW.status_manajemen = 'Disetujui' THEN 'Cuti Disetujui (Manajemen)'
+        WHEN NEW.status_manajemen = 'Ditolak' THEN 'Cuti Ditolak (Manajemen)'
+        ELSE 'Status Manajemen Berubah'
+      END,
+      CONCAT('Pengajuan cuti ', NEW.no_pengajuan, ' (manajemen): ', NEW.status_manajemen),
+      JSON_OBJECT('no_pengajuan', NEW.no_pengajuan, 'status_manajemen', NEW.status_manajemen),
+      NOW(3), 'pengajuan_cuti', NEW.no_pengajuan
+    FROM (SELECT 1) dummy;
   END IF;
 END//
 
@@ -952,7 +979,7 @@ BEGIN
   WHERE source_table = 'pengajuan_cuti' AND source_pk = OLD.no_pengajuan AND deleted_at IS NULL;
 END//
 
--- G2. pengajuan_inventaris → inventory_application (INSERT - dual) ──
+-- G2. pengajuan_inventaris → inventory_application (INSERT - notify only nik_pj) ──
 DROP TRIGGER IF EXISTS trg_notify_pengajuan_inventaris//
 
 CREATE TRIGGER trg_notify_pengajuan_inventaris
@@ -961,19 +988,16 @@ FOR EACH ROW
 BEGIN
   INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
   SELECT
-    combined.nik,
+    NEW.nik_pj,
     'inventory_application',
     'Pengajuan Inventaris Baru',
     CONCAT('Pengajuan inventaris oleh ', COALESCE(pw.nama, 'Pegawai')),
     JSON_OBJECT('no_pengajuan', NEW.no_pengajuan, 'nama_pegawai', COALESCE(pw.nama, ''),
                 'status', NEW.status),
     NOW(3), 'pengajuan_inventaris', NEW.no_pengajuan
-  FROM (
-    SELECT NEW.nik AS nik
-    UNION ALL
-    SELECT NEW.nik_pj
-  ) combined
-  LEFT JOIN pegawai pw ON pw.nik = combined.nik;
+  FROM pegawai pw
+  WHERE pw.nik = NEW.nik
+  LIMIT 1;
 END//
 
 DROP TRIGGER IF EXISTS trg_notify_upd_pengajuan_inventaris//
@@ -985,7 +1009,7 @@ BEGIN
   IF NEW.status <> OLD.status THEN
     INSERT INTO sik.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
     SELECT
-      combined.nik,
+      NEW.nik,
       CASE
         WHEN NEW.status = 'Disetujui' THEN 'inventory_approved'
         WHEN NEW.status = 'Ditolak' THEN 'inventory_rejected'
@@ -999,11 +1023,7 @@ BEGIN
       CONCAT('Pengajuan inventaris ', NEW.no_pengajuan, ': ', NEW.status),
       JSON_OBJECT('no_pengajuan', NEW.no_pengajuan, 'status', NEW.status),
       NOW(3), 'pengajuan_inventaris', NEW.no_pengajuan
-    FROM (
-      SELECT NEW.nik AS nik
-      UNION ALL
-      SELECT NEW.nik_pj
-    ) combined;
+    FROM (SELECT 1) dummy;
   END IF;
 END//
 

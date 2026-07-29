@@ -106,28 +106,10 @@ module.exports = (app, _corsOptions) => {
     })
   );
 
-  const allowedOrigins = process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
-    : [];
-  const isIpAllowed = (origin) => origin?.startsWith('http://10.100.0.');
-
   app.use(
     '*',
     cors({
-      origin: (origin) => {
-        // Production: origin null/undefined (curl, non-browser) DIBLOKIR
-        // Development: semua diizinkan untuk kemudahan testing
-        if (process.env.NODE_ENV !== 'production') {
-          return origin || '*';
-        }
-        if (
-          origin &&
-          (allowedOrigins.includes(origin) || isIpAllowed(origin))
-        ) {
-          return origin;
-        }
-        return null;
-      },
+      origin: (origin) => origin || '*',
       allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       credentials: true,
     })

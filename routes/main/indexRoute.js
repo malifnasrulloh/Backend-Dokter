@@ -22,6 +22,16 @@ router.get('/health', async (c) => {
   }
 });
 
+// Readiness probe — untuk Kubernetes / Docker zero-downtime deploy
+router.get('/ready', async (c) => {
+  try {
+    await db.query('SELECT 1');
+    return c.json({ code: 200, success: true, status: 'ready' });
+  } catch (_err) {
+    return c.json({ code: 503, success: false, status: 'not ready' }, 503);
+  }
+});
+
 // Health check detail — hanya untuk internal (via token)
 router.get('/health/detail', validateTokenJWT, async (c) => {
   const startTime = Date.now();

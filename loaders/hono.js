@@ -92,7 +92,16 @@ module.exports = (app, _corsOptions) => {
   app.use(
     '*',
     secureHeaders({
-      contentSecurityPolicy: false,
+      contentSecurityPolicy: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
       crossOriginEmbedderPolicy: false,
     })
   );
@@ -124,6 +133,20 @@ module.exports = (app, _corsOptions) => {
     })
   );
 
+  // Body size limit (10MB max)
+  app.use('*', async (c, next) => {
+    const method = c.req.method;
+    if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
+      const contentLength = parseInt(c.req.header('content-length') || '0', 10);
+      const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10MB
+      if (contentLength > MAX_BODY_SIZE) {
+        c.status(413);
+        return c.json({ code: 413, success: false, message: 'Request body too large (max 10MB)' });
+      }
+    }
+    await next();
+  });
+
   app.use('*', requestIdMiddleware);
 
   app.use('*', customHttpLogger);
@@ -143,12 +166,17 @@ module.exports = (app, _corsOptions) => {
           const body = await c.req.parseBody();
           c.set('body', body);
         }
-      } catch {
+      } catch (err) {
+        logger.warn(`[Body] Failed to parse body from ${c.req.path}: ${err.message}`);
         c.set('body', {});
       }
     }
     await next();
   });
+
+  // Input sanitization on request body
+  const { sanitizeMiddleware } = require('../middleware/sanitize');
+  app.use('*', sanitizeMiddleware);
 
   setupSwagger(app);
 

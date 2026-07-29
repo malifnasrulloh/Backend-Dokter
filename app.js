@@ -13,9 +13,12 @@ async function startServer() {
 
   honoLoader(app);
 
-  // Start background database monitor for real-time notifications
-  const dbMonitor = require('./services/dbMonitorService');
-  dbMonitor.start();
+  // Start background database monitor (disabled by default — triggers handle detection)
+  if (process.env.DB_MONITOR_ENABLED === 'true') {
+    const dbMonitor = require('./services/dbMonitorService');
+    dbMonitor.start();
+    logger.info('[DB-Monitor] Enabled via DB_MONITOR_ENABLED=true');
+  }
 
   // Start INA-CBG billing threshold monitor
   const inacbgMonitor = require('./services/inacbgMonitorService');

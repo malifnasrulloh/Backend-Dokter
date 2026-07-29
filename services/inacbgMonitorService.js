@@ -16,7 +16,7 @@ const { logger } = require('../middleware/logger');
  */
 
 const THRESHOLDS = [80, 100, 120];
-const POLL_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const POLL_INTERVAL = parseInt(process.env.INACBG_MONITOR_INTERVAL || '300000', 10); // 5 min default
 
 // In-memory dedup: no_rawat -> Set of already-alerted thresholds
 const alerted = new Map();

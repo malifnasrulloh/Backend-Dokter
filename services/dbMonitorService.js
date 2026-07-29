@@ -200,8 +200,9 @@ async function poll() {
 // ── Start ──────────────────────────────────────────────────────────
 
 function start() {
+  const pollInterval = parseInt(process.env.DB_MONITOR_INTERVAL || '3000', 10);
   init().then(() => {
-    setInterval(poll, 3000);
+    if (pollInterval > 0) setInterval(poll, pollInterval);
     // Cleanup old notifications once per hour
     setInterval(() => {
       cleanOldNotifications(7).catch((err) => {

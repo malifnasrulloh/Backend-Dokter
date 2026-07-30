@@ -141,7 +141,7 @@ async function poll() {
           COALESCE((
             SELECT COALESCE(SUM(besar_pengurangan), 0) FROM pengurangan_biaya WHERE no_rawat = ?
           ), 0) AS potongan
-      `, Array(39).fill(n));
+      `, Array(34).fill(n));
 
       const d = rows[0] || {};
       const bhp = Number(d.bhp) || 0;

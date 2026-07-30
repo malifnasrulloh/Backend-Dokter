@@ -1,0 +1,15 @@
+# lefthook.yml — pre-commit hooks for Backend-Dokter
+# Install: npm install -g lefthook && lefthook install
+
+pre-commit:
+  parallel: true
+  commands:
+    syntax-check:
+      glob: "*.js"
+      run: node --check {staged_files}
+    biome-lint:
+      glob: "*.js"
+      run: npx biome check --write --no-errors-on-unmatched {staged_files} && git add {staged_files}
+    biome-format:
+      glob: "*.js"
+      run: npx biome format --write --no-errors-on-unmatched {staged_files} && git add {staged_files}

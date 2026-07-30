@@ -7,7 +7,11 @@
     "dev": "bun --hot app.js",
     "pm2": "pm2 start ecosystem.config.js",
     "pm2prod": "pm2 start ecosystem.config.js --env production",
-    "respm2": "pm2 restart backend-dokter"
+    "respm2": "pm2 restart backend-dokter",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [],
   "author": "sirs",
@@ -28,6 +32,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.15"
+    "@biomejs/biome": "^2.4.15",
+    "vitest": "^3.2.7"
   }
 }

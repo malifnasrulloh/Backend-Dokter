@@ -148,7 +148,7 @@ module.exports = (app, _corsOptions) => {
   });
 
   // Input sanitization on request body
-  const { sanitizeMiddleware } = require('../middleware/sanitize');
+  const sanitizeMiddleware = require('../middleware/sanitize');
   app.use('*', sanitizeMiddleware);
 
   setupSwagger(app);

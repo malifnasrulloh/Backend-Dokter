@@ -38,7 +38,7 @@ async function poll() {
       .innerJoin('perkiraan_biaya_ranap as pbr', 'rp.no_rawat', 'pbr.no_rawat')
       .leftJoin('billing as b', function () {
         this.on('rp.no_rawat', '=', 'b.no_rawat')
-          .andOn('b.status', 'not like', 'Ttl%');
+          .andOn(knex.raw('b.status NOT LIKE ?', ['Ttl%']));
       })
       .leftJoin('pasien as p', 'rp.no_rkm_medis', 'p.no_rkm_medis')
       .where('rp.status_lanjut', 'Ranap')

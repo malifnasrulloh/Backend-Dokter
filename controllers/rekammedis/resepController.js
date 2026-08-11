@@ -17,60 +17,67 @@ exports.getMedicineList = async (req, res) => {
   const cacheKey = `master:obat:search:${keyword || ''}:page:${pageNum}:limit:${limitNum}`;
 
   try {
-    const cachedData = await cache.remember(cacheKey, async () => {
-      let query = knex('databarang as db')
-        .leftJoin('kodesatuan as ks', 'db.kode_sat', 'ks.kode_sat')
-        .leftJoin('gudangbarang as gb', 'db.kode_brng', 'gb.kode_brng')
-        .select(
-          'db.kode_brng',
-          'db.nama_brng',
-          'ks.satuan',
-          'db.ralan as harga',
-          knex.raw('COALESCE(SUM(gb.stok), 0) as total_stok')
-        )
-        .where('db.status', '1');
+    const cachedData = await cache.remember(
+      cacheKey,
+      async () => {
+        let query = knex('databarang as db')
+          .leftJoin('kodesatuan as ks', 'db.kode_sat', 'ks.kode_sat')
+          .leftJoin('gudangbarang as gb', 'db.kode_brng', 'gb.kode_brng')
+          .select(
+            'db.kode_brng',
+            'db.nama_brng',
+            'ks.satuan',
+            'db.ralan as harga',
+            knex.raw('COALESCE(SUM(gb.stok), 0) as total_stok')
+          )
+          .where('db.status', '1');
 
-      if (keyword && keyword.trim() !== '') {
-        const searchPattern = `%${keyword.trim()}%`;
-        query = query.andWhere((builder) => {
-          builder.where('db.nama_brng', 'like', searchPattern)
-                 .orWhere('db.kode_brng', 'like', searchPattern);
-        });
-      }
-
-      query = query.groupBy('db.kode_brng', 'db.nama_brng', 'ks.satuan', 'db.ralan');
-
-      // Run total count query
-      const totalQuery = knex.select(knex.raw('count(distinct db.kode_brng) as total'))
-        .from('databarang as db')
-        .where('db.status', '1');
-
-      if (keyword && keyword.trim() !== '') {
-        const searchPattern = `%${keyword.trim()}%`;
-        totalQuery.andWhere((builder) => {
-          builder.where('db.nama_brng', 'like', searchPattern)
-                    .orWhere('db.kode_brng', 'like', searchPattern);
-        });
-      }
-
-      const [totalRecord, list] = await Promise.all([
-        totalQuery.first(),
-        query.orderBy('db.nama_brng', 'asc').limit(limitNum).offset(offset)
-      ]);
-
-      const totalCount = totalRecord?.total || 0;
-      const totalPages = Math.ceil(totalCount / limitNum);
-
-      return {
-        list,
-        pagination: {
-          total: totalCount,
-          page: pageNum,
-          limit: limitNum,
-          total_pages: totalPages
+        if (keyword && keyword.trim() !== '') {
+          const searchPattern = `%${keyword.trim()}%`;
+          query = query.andWhere((builder) => {
+            builder
+              .where('db.nama_brng', 'like', searchPattern)
+              .orWhere('db.kode_brng', 'like', searchPattern);
+          });
         }
-      };
-    }, 300);
+
+        query = query.groupBy('db.kode_brng', 'db.nama_brng', 'ks.satuan', 'db.ralan');
+
+        // Run total count query
+        const totalQuery = knex
+          .select(knex.raw('count(distinct db.kode_brng) as total'))
+          .from('databarang as db')
+          .where('db.status', '1');
+
+        if (keyword && keyword.trim() !== '') {
+          const searchPattern = `%${keyword.trim()}%`;
+          totalQuery.andWhere((builder) => {
+            builder
+              .where('db.nama_brng', 'like', searchPattern)
+              .orWhere('db.kode_brng', 'like', searchPattern);
+          });
+        }
+
+        const [totalRecord, list] = await Promise.all([
+          totalQuery.first(),
+          query.orderBy('db.nama_brng', 'asc').limit(limitNum).offset(offset),
+        ]);
+
+        const totalCount = totalRecord?.total || 0;
+        const totalPages = Math.ceil(totalCount / limitNum);
+
+        return {
+          list,
+          pagination: {
+            total: totalCount,
+            page: pageNum,
+            limit: limitNum,
+            total_pages: totalPages,
+          },
+        };
+      },
+      300
+    );
 
     return response.ok(res, cachedData);
   } catch (error) {
@@ -99,58 +106,79 @@ exports.createPrescription = async (req, res) => {
 
   const trx = await knex.transaction();
 
+  // no_resep = YYYYMMDD + max(RIGHT(4))+1 has no row lock; with the
+  // uk_no_resep unique key a concurrent collision raises ER_DUP_ENTRY.
+  // Retry recomputes the sequence instead of 500ing the whole batch.
+  const MAX_SEQ_RETRIES = 3;
+  let no_resep = '';
+
   try {
-    const today = dayjs().format('YYYY-MM-DD');
-    const todayStr = dayjs().format('YYYYMMDD');
-    const timeNow = dayjs().format('HH:mm:ss');
+    for (let attempt = 1; attempt <= MAX_SEQ_RETRIES; attempt++) {
+      try {
+        const today = dayjs().format('YYYY-MM-DD');
+        const todayStr = dayjs().format('YYYYMMDD');
+        const timeNow = dayjs().format('HH:mm:ss');
 
-    // Generate no_resep matching format: YYYYMMDDXXXX
-    const maxRecord = await trx('resep_obat')
-      .where('tgl_perawatan', today)
-      .orWhere('tgl_peresepan', today)
-      .select(trx.raw('COALESCE(MAX(CONVERT(RIGHT(no_resep, 4), SIGNED)), 0) as max_val'))
-      .first();
+        // Generate no_resep matching format: YYYYMMDDXXXX
+        const maxRecord = await trx('resep_obat')
+          .where('tgl_perawatan', today)
+          .orWhere('tgl_peresepan', today)
+          .select(trx.raw('COALESCE(MAX(CONVERT(RIGHT(no_resep, 4), SIGNED)), 0) as max_val'))
+          .first();
 
-    const nextSeq = (maxRecord?.max_val || 0) + 1;
-    const paddedSeq = String(nextSeq).padStart(4, '0');
-    const no_resep = `${todayStr}${paddedSeq}`;
+        const nextSeq = (maxRecord?.max_val || 0) + 1;
+        const paddedSeq = String(nextSeq).padStart(4, '0');
+        no_resep = `${todayStr}${paddedSeq}`;
 
-    // Insert to resep_obat
-    const resepObatData = {
-      no_resep,
-      tgl_perawatan: '0000-00-00',
-      jam: '00:00:00',
-      no_rawat,
-      kd_dokter: doctorNik,
-      tgl_peresepan: today,
-      jam_peresepan: timeNow,
-      status,
-      tgl_penyerahan: '0000-00-00',
-      jam_penyerahan: '00:00:00'
-    };
+        // Insert to resep_obat
+        const resepObatData = {
+          no_resep,
+          tgl_perawatan: '0000-00-00',
+          jam: '00:00:00',
+          no_rawat,
+          kd_dokter: doctorNik,
+          tgl_peresepan: today,
+          jam_peresepan: timeNow,
+          status,
+          tgl_penyerahan: '0000-00-00',
+          jam_penyerahan: '00:00:00',
+        };
 
-    await trx('resep_obat').insert(resepObatData);
+        await trx('resep_obat').insert(resepObatData);
 
-    // Insert to resep_dokter
-    const resepDokterRows = items.map((item) => ({
-      no_resep,
-      kode_brng: item.kode_brng,
-      jml: Number.parseFloat(item.jml) || 0,
-      aturan_pakai: item.aturan_pakai || '-'
-    }));
+        // Insert to resep_dokter
+        const resepDokterRows = items.map((item) => ({
+          no_resep,
+          kode_brng: item.kode_brng,
+          jml: Number.parseFloat(item.jml) || 0,
+          aturan_pakai: item.aturan_pakai || '-',
+        }));
 
-    await trx('resep_dokter').insert(resepDokterRows);
+        await trx('resep_dokter').insert(resepDokterRows);
 
-    await trx.commit();
-    await cache.delByPrefix('master:obat:search:');
+        await trx.commit();
+        await cache.delByPrefix('master:obat:search:');
 
-    return response.created(res, {
-      no_resep,
-      ...resepObatData,
-      items: resepDokterRows
-    });
+        return response.created(res, {
+          no_resep,
+          ...resepObatData,
+          items: resepDokterRows,
+        });
+      } catch (seqError) {
+        await trx.rollback();
+        const isDup =
+          seqError?.code === 'ER_DUP_ENTRY' || /Duplicate entry/i.test(seqError?.message || '');
+        if (isDup && attempt < MAX_SEQ_RETRIES) {
+          logger.warn(
+            `[RESEP] no_resep collision (${no_resep || '?'}), retry ${attempt}/${MAX_SEQ_RETRIES - 1}`
+          );
+          continue;
+        }
+        throw seqError;
+      }
+    }
+    throw new Error('resep sequence exhausted');
   } catch (error) {
-    await trx.rollback();
     logger.error('Create Prescription Error:', error);
     return response.internalError(req, res, error, 'Gagal menyimpan resep obat');
   }
@@ -169,9 +197,7 @@ exports.deletePrescription = async (req, res) => {
 
   try {
     // Check if resep exists and whether it has been processed/dispensed
-    const prescription = await trx('resep_obat')
-      .where({ no_resep })
-      .first();
+    const prescription = await trx('resep_obat').where({ no_resep }).first();
 
     if (!prescription) {
       await trx.rollback();
@@ -180,12 +206,15 @@ exports.deletePrescription = async (req, res) => {
 
     if (prescription.tgl_penyerahan !== '0000-00-00' && prescription.tgl_penyerahan !== null) {
       await trx.rollback();
-      return response.failedDelete(res, 'Resep sudah diproses/diserahkan oleh apotik dan tidak bisa dihapus');
+      return response.failedDelete(
+        res,
+        'Resep sudah diproses/diserahkan oleh apotik dan tidak bisa dihapus'
+      );
     }
 
     // Delete details first
     await trx('resep_dokter').where({ no_resep }).del();
-    
+
     // Delete master
     await trx('resep_obat').where({ no_resep }).del();
 

@@ -5,13 +5,22 @@ const { compress } = require('hono/compress');
 const customHttpLogger = require('../middleware/customHttpLogger');
 const response = require('../middleware/responseHandler');
 const { logger } = require('../middleware/logger');
-const { trackerMiddleware } = require('../middleware/tracker');
 const requestIdMiddleware = require('../middleware/requestId');
 const apiRoutes = require('../routes/main/indexRoute');
 const validateTokenJWT = require('../middleware/validateTokenJwt');
 
 const redisClient = require('../config/redis');
-const setupSwagger = require('../utils/swagger');
+
+// Trust proxy header only when explicitly enabled (reverse proxy in front).
+// Without this, clients can spoof x-forwarded-for to dodge rate limits.
+const TRUST_PROXY = process.env.TRUST_PROXY === 'true';
+const realIp = (c) => {
+  if (TRUST_PROXY) {
+    const xff = c.req.header('x-forwarded-for');
+    if (xff) return xff.split(',')[0].trim();
+  }
+  return c.req.raw?.socket?.remoteAddress || c.req.raw?.connection?.remoteAddress || '127.0.0.1';
+};
 
 // In-memory fallback limiter saat Redis tidak tersedia
 const memoryLimiter = new Map();
@@ -19,7 +28,7 @@ const MEMORY_LIMIT = 200; // lebih ketat saat fallback
 const MEMORY_WINDOW_MS = 15 * 60 * 1000;
 
 const honoLimiter = async (c, next) => {
-  const ip = c.req.header('x-forwarded-for') || '127.0.0.1';
+  const ip = realIp(c);
 
   const isLocal =
     ip === '127.0.0.1' || ip === '::1' || ip.startsWith('192.168.') || ip.startsWith('10.100.0.');
@@ -42,7 +51,10 @@ const honoLimiter = async (c, next) => {
     if (redisClient.status !== 'ready') {
       // Fallback ke in-memory limiter — tidak bypass
       const now = Date.now();
-      const entry = memoryLimiter.get(rateLimitKey) || { count: 0, resetAt: now + MEMORY_WINDOW_MS };
+      const entry = memoryLimiter.get(rateLimitKey) || {
+        count: 0,
+        resetAt: now + MEMORY_WINDOW_MS,
+      };
       if (now > entry.resetAt) {
         entry.count = 0;
         entry.resetAt = now + MEMORY_WINDOW_MS;
@@ -51,8 +63,13 @@ const honoLimiter = async (c, next) => {
       memoryLimiter.set(rateLimitKey, entry);
 
       if (entry.count > MEMORY_LIMIT) {
-        logger.warn(`[MemLimiter] Key ${rateLimitKey} diblokir (Redis offline fallback): ${entry.count} req`);
-        return c.json({ status: 429, message: 'Terlalu banyak permintaan, silakan coba lagi nanti.' }, 429);
+        logger.warn(
+          `[MemLimiter] Key ${rateLimitKey} diblokir (Redis offline fallback): ${entry.count} req`
+        );
+        return c.json(
+          { status: 429, message: 'Terlalu banyak permintaan, silakan coba lagi nanti.' },
+          429
+        );
       }
       return await next();
     }
@@ -97,10 +114,25 @@ module.exports = (app, _corsOptions) => {
     })
   );
 
+  // CORS: explicit allowlist via CORS_ORIGINS (comma-separated).
+  //   - Not configured + production  => cross-origin blocked (mobile apps
+  //     don't send Origin anyway; only browser/web builds need this).
+  //   - Not configured + development => reflect any origin (dev ergonomics).
+  const allowedOrigins = (process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const isProd = process.env.NODE_ENV === 'production';
   app.use(
     '*',
     cors({
-      origin: (origin) => origin || '*',
+      origin: (origin) => {
+        if (!origin) return origin; // same-origin / non-browser request
+        if (allowedOrigins.length > 0) {
+          return allowedOrigins.includes(origin) ? origin : false;
+        }
+        return isProd ? false : origin;
+      },
       allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       credentials: true,
     })
@@ -131,6 +163,8 @@ module.exports = (app, _corsOptions) => {
       try {
         if (contentType.includes('application/json')) {
           const body = await c.req.json();
+          // Raw body is kept for controllers; sensitive-key redaction
+          // happens at the audit-trail boundary (middleware/auditTrail.js).
           c.set('body', body);
         } else if (
           contentType.includes('application/x-www-form-urlencoded') ||
@@ -150,8 +184,6 @@ module.exports = (app, _corsOptions) => {
   // Input sanitization on request body
   const sanitizeMiddleware = require('../middleware/sanitize');
   app.use('*', sanitizeMiddleware);
-
-  setupSwagger(app);
 
   app.use('/api/*', honoLimiter);
   app.route('/api', apiRoutes);

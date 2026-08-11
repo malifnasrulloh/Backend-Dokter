@@ -51,13 +51,13 @@ exports.getRiwayatSbar = async (req, res) => {
 
   const mapped = rows.map((row) => {
     const docNik = row.doc_creator_nik || row.dpjp_nik;
-    const docName = row.doc_creator_name || row.dpjp_name;
+    const _docName = row.doc_creator_name || row.dpjp_name;
 
     let status_validasi = row.doc_creator_nik ? 'Validasi' : null;
     let tgl_validasi = row.doc_creator_nik ? dayjs(row.tgl_perawatan).format('YYYY-MM-DD') : null;
     let jam_validasi = row.doc_creator_nik ? row.jam_rawat : null;
     let nik_validator = row.doc_creator_nik ? row.doc_creator_nik : null;
-    let namavalidator = row.doc_creator_nik ? row.doc_creator_name : row.dpjp_name;
+    const namavalidator = row.doc_creator_nik ? row.doc_creator_name : row.dpjp_name;
 
     if (row.evaluasi) {
       const match = row.evaluasi.match(/\[Validasi:\s*([^|]+)\|\s*([^|]+)\|\s*([^\]]+)\]/);
@@ -89,4 +89,3 @@ exports.getRiwayatSbar = async (req, res) => {
 
   return response.ok(res, mapped);
 };
-

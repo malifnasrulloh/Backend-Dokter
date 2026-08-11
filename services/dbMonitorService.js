@@ -17,7 +17,7 @@ const { logger } = require('../middleware/logger');
 
 // ── Per-table tracking ──
 // Store the last-seen MAX(id) for each source table
-let lastMaxId = {
+const lastMaxId = {
   konsultasi_medik: 0,
   konsultasi_perawat: 0,
   jawaban_konsultasi_medik: 0,
@@ -62,7 +62,9 @@ async function init() {
     lastMaxId.jawaban_konsultasi_medik = await getMax('jawaban_konsultasi_medik', 'no_permintaan');
     lastMaxId.reg_periksa = await getMax('reg_periksa', 'no_rawat');
 
-    logger.info(`[DB-Monitor] Started. Dedup pre-loaded: KM=${dedup.konsultasiMedik.size} KP=${dedup.konsultasiPerawat.size} JKM=${dedup.jawabanKonsultasi.size} RP=${dedup.regPeriksa.size}`);
+    logger.info(
+      `[DB-Monitor] Started. Dedup pre-loaded: KM=${dedup.konsultasiMedik.size} KP=${dedup.konsultasiPerawat.size} JKM=${dedup.jawabanKonsultasi.size} RP=${dedup.regPeriksa.size}`
+    );
   } catch (err) {
     logger.error('[DB-Monitor] Init error:', err);
   }
@@ -103,7 +105,9 @@ async function poll() {
       dedup.konsultasiMedik.add(row.no_permintaan);
       lastMaxId.konsultasi_medik = row.no_permintaan;
 
-      logger.info(`[DB-Monitor] New consultation: ${row.no_permintaan} → dr ${row.kd_dokter_dikonsuli}`);
+      logger.info(
+        `[DB-Monitor] New consultation: ${row.no_permintaan} → dr ${row.kd_dokter_dikonsuli}`
+      );
       await sendNotification(row.kd_dokter_dikonsuli, 'consultation_request', {
         no_permintaan: row.no_permintaan,
         no_rawat: row.no_rawat,
@@ -164,7 +168,9 @@ async function poll() {
       dedup.jawabanKonsultasi.add(row.no_permintaan);
       lastMaxId.jawaban_konsultasi_medik = row.no_permintaan;
 
-      logger.info(`[DB-Monitor] New consultation reply: ${row.no_permintaan} → dr ${row.kd_dokter_peminta}`);
+      logger.info(
+        `[DB-Monitor] New consultation reply: ${row.no_permintaan} → dr ${row.kd_dokter_peminta}`
+      );
       await sendNotification(row.kd_dokter_peminta, 'consultation_response', {
         no_permintaan: row.no_permintaan,
         nm_dokter_dikonsuli: row.nm_dokter_dikonsuli || 'Rekan Dokter',
@@ -189,7 +195,6 @@ async function poll() {
         nm_pasien: row.nm_pasien || 'Pasien Baru',
       });
     }
-
   } catch (err) {
     logger.error('[DB-Monitor] Polling error:', err);
   } finally {

@@ -5,7 +5,9 @@ const validateParams = require('../../middleware/validateParams');
 const { isValidDate, calculateAge } = require('../../utils/dateHelper');
 const { buildOrderClause } = require('../../utils/paginationHelper');
 const cache = require('../../utils/cache');
-const regPeriksaRepo = require('../../repositories/regPeriksaRepository');
+const _regPeriksaRepo = require('../../repositories/regPeriksaRepository');
+
+const { doctorInCondition } = require('../../utils/doctorIdentity');
 
 const parseGroupConcatMap = (str, itemSeparator = '||', keyValueSeparator = ':') => {
   if (!str) return [];
@@ -119,8 +121,9 @@ exports.getListPasienRanap = async (req, res) => {
   }
 
   if (kd_dokter) {
-    conditions.push('dpjp_ranap.kd_dokter = ?');
-    params.push(kd_dokter);
+    const cond = await doctorInCondition('dpjp_ranap.kd_dokter', kd_dokter);
+    conditions.push(cond.sql);
+    params.push(...cond.params);
   }
 
   if (statusbayar !== 'semua') {
@@ -193,7 +196,7 @@ exports.getListPasienRanap = async (req, res) => {
         };
       });
     },
-    5
+    30
   );
 
   if (finalData.length === 0) {

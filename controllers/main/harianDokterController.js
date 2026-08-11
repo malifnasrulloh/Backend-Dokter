@@ -44,9 +44,10 @@ function buildHarianDokterQueries(params, kd_dokter) {
     }
     if (hasSearch && search) {
       qb.where((builder) => {
-        builder.where('pasien.nm_pasien', 'like', `%${search}%`)
-               .orWhere('reg_periksa.no_rawat', 'like', `%${search}%`)
-               .orWhere('reg_periksa.no_rkm_medis', 'like', `%${search}%`);
+        builder
+          .where('pasien.nm_pasien', 'like', `%${search}%`)
+          .orWhere('reg_periksa.no_rawat', 'like', `%${search}%`)
+          .orWhere('reg_periksa.no_rkm_medis', 'like', `%${search}%`);
       });
     }
     applyStatusFilter(qb, status, 'reg_periksa');
@@ -73,7 +74,10 @@ function buildHarianDokterQueries(params, kd_dokter) {
         knex.raw("'Rawat Jalan (Dokter)' AS tipe"),
         knex.raw("'RJ' AS kat_code")
       )
-      .whereRaw("concat(reg_periksa.tgl_registrasi, ' ', reg_periksa.jam_reg) BETWEEN ? AND ?", [tgl1Dt, tgl2Dt])
+      .whereRaw("concat(reg_periksa.tgl_registrasi, ' ', reg_periksa.jam_reg) BETWEEN ? AND ?", [
+        tgl1Dt,
+        tgl2Dt,
+      ])
       .where('rawat_jl_dr.kd_dokter', kd_dokter)
       .where('rawat_jl_dr.tarif_tindakandr', '>', 0);
     applyCommonFilters(qRj1);
@@ -98,7 +102,10 @@ function buildHarianDokterQueries(params, kd_dokter) {
         knex.raw("'Rawat Jalan (Dokter & Perawat)' AS tipe"),
         knex.raw("'RJ' AS kat_code")
       )
-      .whereRaw("concat(reg_periksa.tgl_registrasi, ' ', reg_periksa.jam_reg) BETWEEN ? AND ?", [tgl1Dt, tgl2Dt])
+      .whereRaw("concat(reg_periksa.tgl_registrasi, ' ', reg_periksa.jam_reg) BETWEEN ? AND ?", [
+        tgl1Dt,
+        tgl2Dt,
+      ])
       .where('rawat_jl_drpr.kd_dokter', kd_dokter)
       .where('rawat_jl_drpr.tarif_tindakandr', '>', 0);
     applyCommonFilters(qRj2);
@@ -110,7 +117,11 @@ function buildHarianDokterQueries(params, kd_dokter) {
     const qRi1 = knex('pasien')
       .innerJoin('reg_periksa', 'reg_periksa.no_rkm_medis', 'pasien.no_rkm_medis')
       .innerJoin('rawat_inap_dr', 'rawat_inap_dr.no_rawat', 'reg_periksa.no_rawat')
-      .innerJoin('jns_perawatan_inap', 'rawat_inap_dr.kd_jenis_prw', 'jns_perawatan_inap.kd_jenis_prw')
+      .innerJoin(
+        'jns_perawatan_inap',
+        'rawat_inap_dr.kd_jenis_prw',
+        'jns_perawatan_inap.kd_jenis_prw'
+      )
       .innerJoin('penjab', 'reg_periksa.kd_pj', 'penjab.kd_pj')
       .select(
         'pasien.nm_pasien',
@@ -126,7 +137,10 @@ function buildHarianDokterQueries(params, kd_dokter) {
         knex.raw("'Rawat Inap (Dokter)' AS tipe"),
         knex.raw("'RI' AS kat_code")
       )
-      .whereRaw("concat(rawat_inap_dr.tgl_perawatan, ' ', rawat_inap_dr.jam_rawat) BETWEEN ? AND ?", [tgl1Dt, tgl2Dt])
+      .whereRaw(
+        "concat(rawat_inap_dr.tgl_perawatan, ' ', rawat_inap_dr.jam_rawat) BETWEEN ? AND ?",
+        [tgl1Dt, tgl2Dt]
+      )
       .where('rawat_inap_dr.kd_dokter', kd_dokter)
       .where('rawat_inap_dr.tarif_tindakandr', '>', 0);
     applyCommonFilters(qRi1);
@@ -135,7 +149,11 @@ function buildHarianDokterQueries(params, kd_dokter) {
     const qRi2 = knex('pasien')
       .innerJoin('reg_periksa', 'reg_periksa.no_rkm_medis', 'pasien.no_rkm_medis')
       .innerJoin('rawat_inap_drpr', 'rawat_inap_drpr.no_rawat', 'reg_periksa.no_rawat')
-      .innerJoin('jns_perawatan_inap', 'rawat_inap_drpr.kd_jenis_prw', 'jns_perawatan_inap.kd_jenis_prw')
+      .innerJoin(
+        'jns_perawatan_inap',
+        'rawat_inap_drpr.kd_jenis_prw',
+        'jns_perawatan_inap.kd_jenis_prw'
+      )
       .innerJoin('penjab', 'reg_periksa.kd_pj', 'penjab.kd_pj')
       .select(
         'pasien.nm_pasien',
@@ -151,7 +169,10 @@ function buildHarianDokterQueries(params, kd_dokter) {
         knex.raw("'Rawat Inap (Dokter & Perawat)' AS tipe"),
         knex.raw("'RI' AS kat_code")
       )
-      .whereRaw("concat(rawat_inap_drpr.tgl_perawatan, ' ', rawat_inap_drpr.jam_rawat) BETWEEN ? AND ?", [tgl1Dt, tgl2Dt])
+      .whereRaw(
+        "concat(rawat_inap_drpr.tgl_perawatan, ' ', rawat_inap_drpr.jam_rawat) BETWEEN ? AND ?",
+        [tgl1Dt, tgl2Dt]
+      )
       .where('rawat_inap_drpr.kd_dokter', kd_dokter)
       .where('rawat_inap_drpr.tarif_tindakandr', '>', 0);
     applyCommonFilters(qRi2);
@@ -167,7 +188,7 @@ function buildHarianDokterQueries(params, kd_dokter) {
       { docField: 'dokter_anak', feeField: 'biayadokter_anak', label: 'dr Anak' },
       { docField: 'dokter_anestesi', feeField: 'biayadokter_anestesi', label: 'dr Anestesi' },
       { docField: 'dokter_pjanak', feeField: 'biaya_dokter_pjanak', label: 'dr Pj Anak' },
-      { docField: 'dokter_umum', feeField: 'biaya_dokter_umum', label: 'dr Umum' }
+      { docField: 'dokter_umum', feeField: 'biaya_dokter_umum', label: 'dr Umum' },
     ];
 
     for (const role of operasiRoles) {
@@ -219,7 +240,10 @@ function buildHarianDokterQueries(params, kd_dokter) {
         knex.raw("'Lab (Pemeriksaan Dokter)' AS tipe"),
         knex.raw("'LAB' AS kat_code")
       )
-      .whereRaw("concat(periksa_lab.tgl_periksa, ' ', periksa_lab.jam) BETWEEN ? AND ?", [tgl1Dt, tgl2Dt])
+      .whereRaw("concat(periksa_lab.tgl_periksa, ' ', periksa_lab.jam) BETWEEN ? AND ?", [
+        tgl1Dt,
+        tgl2Dt,
+      ])
       .where('periksa_lab.kd_dokter', kd_dokter)
       .where('periksa_lab.tarif_tindakan_dokter', '>', 0);
     applyCommonFilters(qLab1);
@@ -234,7 +258,11 @@ function buildHarianDokterQueries(params, kd_dokter) {
       })
       .innerJoin('reg_periksa', 'periksa_lab.no_rawat', 'reg_periksa.no_rawat')
       .innerJoin('pasien', 'reg_periksa.no_rkm_medis', 'pasien.no_rkm_medis')
-      .innerJoin('template_laboratorium', 'detail_periksa_lab.id_template', 'template_laboratorium.id_template')
+      .innerJoin(
+        'template_laboratorium',
+        'detail_periksa_lab.id_template',
+        'template_laboratorium.id_template'
+      )
       .innerJoin('penjab', 'reg_periksa.kd_pj', 'penjab.kd_pj')
       .select(
         'pasien.nm_pasien',
@@ -250,7 +278,10 @@ function buildHarianDokterQueries(params, kd_dokter) {
         knex.raw("'Lab (Detail Pemeriksaan)' AS tipe"),
         knex.raw("'LAB' AS kat_code")
       )
-      .whereRaw("concat(detail_periksa_lab.tgl_periksa, ' ', detail_periksa_lab.jam) BETWEEN ? AND ?", [tgl1Dt, tgl2Dt])
+      .whereRaw(
+        "concat(detail_periksa_lab.tgl_periksa, ' ', detail_periksa_lab.jam) BETWEEN ? AND ?",
+        [tgl1Dt, tgl2Dt]
+      )
       .where('periksa_lab.kd_dokter', kd_dokter)
       .where('detail_periksa_lab.bagian_dokter', '>', 0);
     applyCommonFilters(qLab2);
@@ -275,7 +306,10 @@ function buildHarianDokterQueries(params, kd_dokter) {
         knex.raw("'Lab (Perujuk)' AS tipe"),
         knex.raw("'LAB' AS kat_code")
       )
-      .whereRaw("concat(periksa_lab.tgl_periksa, ' ', periksa_lab.jam) BETWEEN ? AND ?", [tgl1Dt, tgl2Dt])
+      .whereRaw("concat(periksa_lab.tgl_periksa, ' ', periksa_lab.jam) BETWEEN ? AND ?", [
+        tgl1Dt,
+        tgl2Dt,
+      ])
       .where('periksa_lab.dokter_perujuk', kd_dokter)
       .where('periksa_lab.tarif_perujuk', '>', 0);
     applyCommonFilters(qLab3);
@@ -290,7 +324,11 @@ function buildHarianDokterQueries(params, kd_dokter) {
       })
       .innerJoin('reg_periksa', 'periksa_lab.no_rawat', 'reg_periksa.no_rawat')
       .innerJoin('pasien', 'reg_periksa.no_rkm_medis', 'pasien.no_rkm_medis')
-      .innerJoin('template_laboratorium', 'detail_periksa_lab.id_template', 'template_laboratorium.id_template')
+      .innerJoin(
+        'template_laboratorium',
+        'detail_periksa_lab.id_template',
+        'template_laboratorium.id_template'
+      )
       .innerJoin('penjab', 'reg_periksa.kd_pj', 'penjab.kd_pj')
       .select(
         'pasien.nm_pasien',
@@ -306,7 +344,10 @@ function buildHarianDokterQueries(params, kd_dokter) {
         knex.raw("'Lab (Detail Perujuk)' AS tipe"),
         knex.raw("'LAB' AS kat_code")
       )
-      .whereRaw("concat(detail_periksa_lab.tgl_periksa, ' ', detail_periksa_lab.jam) BETWEEN ? AND ?", [tgl1Dt, tgl2Dt])
+      .whereRaw(
+        "concat(detail_periksa_lab.tgl_periksa, ' ', detail_periksa_lab.jam) BETWEEN ? AND ?",
+        [tgl1Dt, tgl2Dt]
+      )
       .where('periksa_lab.dokter_perujuk', kd_dokter)
       .where('detail_periksa_lab.bagian_perujuk', '>', 0);
     applyCommonFilters(qLab4);
@@ -318,7 +359,11 @@ function buildHarianDokterQueries(params, kd_dokter) {
     const qRad1 = knex('periksa_radiologi')
       .innerJoin('reg_periksa', 'periksa_radiologi.no_rawat', 'reg_periksa.no_rawat')
       .innerJoin('pasien', 'reg_periksa.no_rkm_medis', 'pasien.no_rkm_medis')
-      .innerJoin('jns_perawatan_radiologi', 'periksa_radiologi.kd_jenis_prw', 'jns_perawatan_radiologi.kd_jenis_prw')
+      .innerJoin(
+        'jns_perawatan_radiologi',
+        'periksa_radiologi.kd_jenis_prw',
+        'jns_perawatan_radiologi.kd_jenis_prw'
+      )
       .innerJoin('penjab', 'reg_periksa.kd_pj', 'penjab.kd_pj')
       .select(
         'pasien.nm_pasien',
@@ -334,7 +379,10 @@ function buildHarianDokterQueries(params, kd_dokter) {
         knex.raw("'Radiologi (Pemeriksaan Dokter)' AS tipe"),
         knex.raw("'RAD' AS kat_code")
       )
-      .whereRaw("concat(periksa_radiologi.tgl_periksa, ' ', periksa_radiologi.jam) BETWEEN ? AND ?", [tgl1Dt, tgl2Dt])
+      .whereRaw(
+        "concat(periksa_radiologi.tgl_periksa, ' ', periksa_radiologi.jam) BETWEEN ? AND ?",
+        [tgl1Dt, tgl2Dt]
+      )
       .where('periksa_radiologi.kd_dokter', kd_dokter)
       .where('periksa_radiologi.tarif_tindakan_dokter', '>', 0);
     applyCommonFilters(qRad1);
@@ -343,7 +391,11 @@ function buildHarianDokterQueries(params, kd_dokter) {
     const qRad2 = knex('periksa_radiologi')
       .innerJoin('reg_periksa', 'periksa_radiologi.no_rawat', 'reg_periksa.no_rawat')
       .innerJoin('pasien', 'reg_periksa.no_rkm_medis', 'pasien.no_rkm_medis')
-      .innerJoin('jns_perawatan_radiologi', 'periksa_radiologi.kd_jenis_prw', 'jns_perawatan_radiologi.kd_jenis_prw')
+      .innerJoin(
+        'jns_perawatan_radiologi',
+        'periksa_radiologi.kd_jenis_prw',
+        'jns_perawatan_radiologi.kd_jenis_prw'
+      )
       .innerJoin('penjab', 'reg_periksa.kd_pj', 'penjab.kd_pj')
       .select(
         'pasien.nm_pasien',
@@ -359,7 +411,10 @@ function buildHarianDokterQueries(params, kd_dokter) {
         knex.raw("'Radiologi (Perujuk)' AS tipe"),
         knex.raw("'RAD' AS kat_code")
       )
-      .whereRaw("concat(periksa_radiologi.tgl_periksa, ' ', periksa_radiologi.jam) BETWEEN ? AND ?", [tgl1Dt, tgl2Dt])
+      .whereRaw(
+        "concat(periksa_radiologi.tgl_periksa, ' ', periksa_radiologi.jam) BETWEEN ? AND ?",
+        [tgl1Dt, tgl2Dt]
+      )
       .where('periksa_radiologi.dokter_perujuk', kd_dokter)
       .where('periksa_radiologi.tarif_perujuk', '>', 0);
     applyCommonFilters(qRad2);
@@ -376,8 +431,8 @@ exports.getHarianDokter = async (req, res) => {
   const kd_pj = req.query.kd_pj || 'Semua';
   const kategori = req.query.kategori || 'RJ,RI,OP,LAB,RAD';
   const search = req.query.search || '';
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 50;
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 50;
 
   const kd_dokter = req.query.dokter || req.user?.username;
 
@@ -386,14 +441,17 @@ exports.getHarianDokter = async (req, res) => {
   }
 
   try {
-    const queries = buildHarianDokterQueries({ tgl1, tgl2, status, kd_pj, kategori, search }, kd_dokter);
-    
+    const queries = buildHarianDokterQueries(
+      { tgl1, tgl2, status, kd_pj, kategori, search },
+      kd_dokter
+    );
+
     if (queries.length === 0) {
       return response.ok(res, {
         total: 0,
         page,
         limit,
-        data: []
+        data: [],
       });
     }
 
@@ -414,7 +472,7 @@ exports.getHarianDokter = async (req, res) => {
       total,
       page,
       limit,
-      data: paginatedData
+      data: paginatedData,
     });
   } catch (error) {
     logger.error('Get Harian Dokter Error:', error);
@@ -437,15 +495,18 @@ exports.getHarianDokterSummary = async (req, res) => {
   }
 
   try {
-    const queries = buildHarianDokterQueries({ tgl1, tgl2, status, kd_pj, kategori, search }, kd_dokter);
+    const queries = buildHarianDokterQueries(
+      { tgl1, tgl2, status, kd_pj, kategori, search },
+      kd_dokter
+    );
 
-    let summary = {
+    const summary = {
       total_rj: 0,
       total_ri: 0,
       total_op: 0,
       total_lab: 0,
       total_rad: 0,
-      grand_total: 0
+      grand_total: 0,
     };
 
     if (queries.length > 0) {
@@ -460,7 +521,12 @@ exports.getHarianDokterSummary = async (req, res) => {
         else if (tx.kat_code === 'LAB') summary.total_lab += tarif;
         else if (tx.kat_code === 'RAD') summary.total_rad += tarif;
       }
-      summary.grand_total = summary.total_rj + summary.total_ri + summary.total_op + summary.total_lab + summary.total_rad;
+      summary.grand_total =
+        summary.total_rj +
+        summary.total_ri +
+        summary.total_op +
+        summary.total_lab +
+        summary.total_rad;
     }
 
     return response.ok(res, summary);
@@ -472,13 +538,15 @@ exports.getHarianDokterSummary = async (req, res) => {
 
 exports.getCaraBayar = async (req, res) => {
   const cacheKey = 'harian_dokter_cara_bayar';
-  
+
   try {
-    const options = await cache.remember(cacheKey, async () => {
-      return await knex('penjab')
-        .select('kd_pj', 'png_jawab')
-        .orderBy('png_jawab');
-    }, 120);
+    const options = await cache.remember(
+      cacheKey,
+      async () => {
+        return await knex('penjab').select('kd_pj', 'png_jawab').orderBy('png_jawab');
+      },
+      120
+    );
 
     return response.ok(res, options);
   } catch (error) {

@@ -1,3 +1,14 @@
+require('dotenv').config();
+
+// Fail-fast at boot (not at module load): the API must never run without
+// a JWT secret. Tests that only require route modules stay env-free.
+if (!process.env.SECRETTOKEN) {
+  console.error(
+    '[FATAL] SECRETTOKEN tidak di-set di .env! Server tidak boleh berjalan tanpa secret key.'
+  );
+  process.exit(1);
+}
+
 const { Hono } = require('hono');
 const honoLoader = require('./loaders/hono');
 const db = require('./config/db');
@@ -34,17 +45,30 @@ async function startServer() {
   });
 
   if (typeof Bun !== 'undefined' && Bun.gc) {
-    setInterval(() => {
-      Bun.gc(true);
-    }, 15 * 60 * 1000);
+    setInterval(
+      () => {
+        Bun.gc(true);
+      },
+      15 * 60 * 1000
+    );
   }
 
-  const server = Bun.serve({
-    fetch: app.fetch,
-    port: PORT,
-  });
+  let server;
+  if (typeof Bun !== 'undefined' && Bun.serve) {
+    server = Bun.serve({
+      fetch: app.fetch,
+      port: PORT,
+    });
+  } else {
+    // Node fallback: @hono/node-server wraps the Fetch API request
+    // correctly (raw http.createServer would pass IncomingMessage).
+    const { serve } = require('@hono/node-server');
+    server = serve({ fetch: app.fetch, port: PORT });
+  }
 
-  logger.info(`[Dokter] Server berjalan di http://localhost:${PORT} [${process.env.NODE_ENV || 'development'}]`);
+  logger.info(
+    `[Dokter] Server berjalan di http://localhost:${PORT} [${process.env.NODE_ENV || 'development'}]`
+  );
   console.log(`[Dokter] Server berjalan di http://localhost:${PORT}`);
 
   if (typeof process.send === 'function') {
@@ -57,7 +81,10 @@ async function startServer() {
     isShuttingDown = true;
     logger.info(`${signal} diterima. Graceful shutdown...`);
     try {
-      server.stop();
+      if (server && typeof server.stop === 'function') server.stop();
+      if (server && typeof server.close === 'function') {
+        await new Promise((resolve) => server.close(resolve));
+      }
       cache.destroy();
       if (typeof db.drainLogs === 'function') await db.drainLogs();
       await db.end();

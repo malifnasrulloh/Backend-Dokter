@@ -3,6 +3,7 @@ const response = require('../../middleware/responseHandler');
 const validateParams = require('../../middleware/validateParams');
 const { isValidDate, calculateAge } = require('../../utils/dateHelper');
 const { buildOrderClause } = require('../../utils/paginationHelper');
+const { doctorInCondition } = require('../../utils/doctorIdentity');
 const regPeriksaRepo = require('../../repositories/regPeriksaRepository');
 const cache = require('../../utils/cache');
 
@@ -64,8 +65,9 @@ exports.getListPasienIGD = async (req, res) => {
   const params = [tglawal, tglakhir, 'IGDK'];
 
   if (kd_dokter) {
-    conditions.push('reg_periksa.kd_dokter = ?');
-    params.push(kd_dokter);
+    const cond = await doctorInCondition('reg_periksa.kd_dokter', kd_dokter);
+    conditions.push(cond.sql);
+    params.push(...cond.params);
   }
 
   if (statuslanjut !== 'semua') {

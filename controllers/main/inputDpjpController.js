@@ -32,11 +32,7 @@ exports.inputDpjp = async (req, res) => {
   const { no_rawat, kd_dokter } = req.body;
 
   if (!no_rawat || !Array.isArray(kd_dokter)) {
-    return response.badRequest(
-      req,
-      res,
-      'Format data tidak valid. kd_dokter harus berupa array.'
-    );
+    return response.badRequest(req, res, 'Format data tidak valid. kd_dokter harus berupa array.');
   }
 
   try {
@@ -62,7 +58,7 @@ exports.inputDpjp = async (req, res) => {
         .select('pasien.nm_pasien')
         .where('reg_periksa.no_rawat', no_rawat)
         .first();
-      
+
       const nm_pasien = patientInfo ? patientInfo.nm_pasien : 'Pasien Baru';
 
       if (kd_dokter.length > 0) {
@@ -117,7 +113,7 @@ exports.updateDpjp = async (req, res) => {
         .select('pasien.nm_pasien')
         .where('reg_periksa.no_rawat', no_rawat)
         .first();
-      
+
       const nm_pasien = patientInfo ? patientInfo.nm_pasien : 'Pasien Baru';
 
       if (kd_dokter.length > 0) {
@@ -149,14 +145,10 @@ exports.deleteDpjp = async (req, res) => {
   try {
     let deletedCount = 0;
     await knex.transaction(async (trx) => {
-      const check = await trx('dpjp_ranap')
-        .where({ no_rawat, kd_dokter })
-        .first();
+      const check = await trx('dpjp_ranap').where({ no_rawat, kd_dokter }).first();
 
       if (check) {
-        deletedCount = await trx('dpjp_ranap')
-          .where({ no_rawat, kd_dokter })
-          .del();
+        deletedCount = await trx('dpjp_ranap').where({ no_rawat, kd_dokter }).del();
       }
     });
 

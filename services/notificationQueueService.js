@@ -236,9 +236,7 @@ async function acknowledgeNotifications(targetNik, deviceId, lastReadId) {
  * Get the max notification ID for a NIK (used for initial cursor).
  */
 async function getLastNotificationId(targetNik) {
-  const [row] = await knex('notification_queue')
-    .where('nik', targetNik)
-    .max('id as max_id');
+  const [row] = await knex('notification_queue').where('nik', targetNik).max('id as max_id');
 
   return row?.max_id ?? 0;
 }
@@ -249,8 +247,11 @@ async function getLastNotificationId(targetNik) {
 async function cleanOldNotifications(days = 7) {
   const result = await knex('notification_queue')
     .where(function () {
-      this.where('created_at', '<', knex.raw('NOW() - INTERVAL ? DAY', [days]))
-        .orWhere('deleted_at', '<', knex.raw('NOW() - INTERVAL ? DAY', [days]));
+      this.where('created_at', '<', knex.raw('NOW() - INTERVAL ? DAY', [days])).orWhere(
+        'deleted_at',
+        '<',
+        knex.raw('NOW() - INTERVAL ? DAY', [days])
+      );
     })
     .del();
 

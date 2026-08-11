@@ -9,11 +9,7 @@ router.post(
   auditTrail('Create SOAP Ralan'),
   asyncHandler(soapController.createSoapRalan)
 );
-router.put(
-  '/ralan',
-  auditTrail('Update SOAP Ralan'),
-  asyncHandler(soapController.updateSoapRalan)
-);
+router.put('/ralan', auditTrail('Update SOAP Ralan'), asyncHandler(soapController.updateSoapRalan));
 router.delete(
   '/ralan',
   auditTrail('Delete SOAP Ralan'),
@@ -25,11 +21,7 @@ router.post(
   auditTrail('Create SOAP Ranap'),
   asyncHandler(soapController.createSoapRanap)
 );
-router.put(
-  '/ranap',
-  auditTrail('Update SOAP Ranap'),
-  asyncHandler(soapController.updateSoapRanap)
-);
+router.put('/ranap', auditTrail('Update SOAP Ranap'), asyncHandler(soapController.updateSoapRanap));
 router.delete(
   '/ranap',
   auditTrail('Delete SOAP Ranap'),

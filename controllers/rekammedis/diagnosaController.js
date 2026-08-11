@@ -16,45 +16,56 @@ exports.getDiseases = async (req, res) => {
   const cacheKey = `master:icd10:search:${keyword || ''}:page:${pageNum}:limit:${limitNum}`;
 
   try {
-    const cachedData = await cache.remember(cacheKey, async () => {
-      let query = knex('penyakit').select('kd_penyakit', 'nm_penyakit', 'ciri_ciri', 'keterangan');
+    const cachedData = await cache.remember(
+      cacheKey,
+      async () => {
+        let query = knex('penyakit').select(
+          'kd_penyakit',
+          'nm_penyakit',
+          'ciri_ciri',
+          'keterangan'
+        );
 
-      if (keyword && keyword.trim() !== '') {
-        const searchPattern = `%${keyword.trim()}%`;
-        query = query.where((builder) => {
-          builder.where('kd_penyakit', 'like', searchPattern)
-                 .orWhere('nm_penyakit', 'like', searchPattern);
-        });
-      }
-
-      // Run total count query
-      const totalQuery = knex('penyakit').count('kd_penyakit as total');
-      if (keyword && keyword.trim() !== '') {
-        const searchPattern = `%${keyword.trim()}%`;
-        totalQuery.where((builder) => {
-          builder.where('kd_penyakit', 'like', searchPattern)
-                    .orWhere('nm_penyakit', 'like', searchPattern);
-        });
-      }
-
-      const [totalRecord, list] = await Promise.all([
-        totalQuery.first(),
-        query.orderBy('nm_penyakit', 'asc').limit(limitNum).offset(offset)
-      ]);
-
-      const totalCount = totalRecord?.total || 0;
-      const totalPages = Math.ceil(totalCount / limitNum);
-
-      return {
-        list,
-        pagination: {
-          total: totalCount,
-          page: pageNum,
-          limit: limitNum,
-          total_pages: totalPages
+        if (keyword && keyword.trim() !== '') {
+          const searchPattern = `%${keyword.trim()}%`;
+          query = query.where((builder) => {
+            builder
+              .where('kd_penyakit', 'like', searchPattern)
+              .orWhere('nm_penyakit', 'like', searchPattern);
+          });
         }
-      };
-    }, 300);
+
+        // Run total count query
+        const totalQuery = knex('penyakit').count('kd_penyakit as total');
+        if (keyword && keyword.trim() !== '') {
+          const searchPattern = `%${keyword.trim()}%`;
+          totalQuery.where((builder) => {
+            builder
+              .where('kd_penyakit', 'like', searchPattern)
+              .orWhere('nm_penyakit', 'like', searchPattern);
+          });
+        }
+
+        const [totalRecord, list] = await Promise.all([
+          totalQuery.first(),
+          query.orderBy('nm_penyakit', 'asc').limit(limitNum).offset(offset),
+        ]);
+
+        const totalCount = totalRecord?.total || 0;
+        const totalPages = Math.ceil(totalCount / limitNum);
+
+        return {
+          list,
+          pagination: {
+            total: totalCount,
+            page: pageNum,
+            limit: limitNum,
+            total_pages: totalPages,
+          },
+        };
+      },
+      300
+    );
 
     return response.ok(res, cachedData);
   } catch (error) {
@@ -75,47 +86,53 @@ exports.getProcedures = async (req, res) => {
   const cacheKey = `master:icd9:search:${keyword || ''}:page:${pageNum}:limit:${limitNum}`;
 
   try {
-    const cachedData = await cache.remember(cacheKey, async () => {
-      let query = knex('icd9').select('kode', 'deskripsi_panjang', 'deskripsi_pendek');
+    const cachedData = await cache.remember(
+      cacheKey,
+      async () => {
+        let query = knex('icd9').select('kode', 'deskripsi_panjang', 'deskripsi_pendek');
 
-      if (keyword && keyword.trim() !== '') {
-        const searchPattern = `%${keyword.trim()}%`;
-        query = query.where((builder) => {
-          builder.where('kode', 'like', searchPattern)
-                 .orWhere('deskripsi_panjang', 'like', searchPattern)
-                 .orWhere('deskripsi_pendek', 'like', searchPattern);
-        });
-      }
-
-      // Run total count query
-      const totalQuery = knex('icd9').count('kode as total');
-      if (keyword && keyword.trim() !== '') {
-        const searchPattern = `%${keyword.trim()}%`;
-        totalQuery.where((builder) => {
-          builder.where('kode', 'like', searchPattern)
-                    .orWhere('deskripsi_panjang', 'like', searchPattern)
-                    .orWhere('deskripsi_pendek', 'like', searchPattern);
-        });
-      }
-
-      const [totalRecord, list] = await Promise.all([
-        totalQuery.first(),
-        query.orderBy('deskripsi_panjang', 'asc').limit(limitNum).offset(offset)
-      ]);
-
-      const totalCount = totalRecord?.total || 0;
-      const totalPages = Math.ceil(totalCount / limitNum);
-
-      return {
-        list,
-        pagination: {
-          total: totalCount,
-          page: pageNum,
-          limit: limitNum,
-          total_pages: totalPages
+        if (keyword && keyword.trim() !== '') {
+          const searchPattern = `%${keyword.trim()}%`;
+          query = query.where((builder) => {
+            builder
+              .where('kode', 'like', searchPattern)
+              .orWhere('deskripsi_panjang', 'like', searchPattern)
+              .orWhere('deskripsi_pendek', 'like', searchPattern);
+          });
         }
-      };
-    }, 300);
+
+        // Run total count query
+        const totalQuery = knex('icd9').count('kode as total');
+        if (keyword && keyword.trim() !== '') {
+          const searchPattern = `%${keyword.trim()}%`;
+          totalQuery.where((builder) => {
+            builder
+              .where('kode', 'like', searchPattern)
+              .orWhere('deskripsi_panjang', 'like', searchPattern)
+              .orWhere('deskripsi_pendek', 'like', searchPattern);
+          });
+        }
+
+        const [totalRecord, list] = await Promise.all([
+          totalQuery.first(),
+          query.orderBy('deskripsi_panjang', 'asc').limit(limitNum).offset(offset),
+        ]);
+
+        const totalCount = totalRecord?.total || 0;
+        const totalPages = Math.ceil(totalCount / limitNum);
+
+        return {
+          list,
+          pagination: {
+            total: totalCount,
+            page: pageNum,
+            limit: limitNum,
+            total_pages: totalPages,
+          },
+        };
+      },
+      300
+    );
 
     return response.ok(res, cachedData);
   } catch (error) {
@@ -136,14 +153,15 @@ exports.createDiagnosis = async (req, res) => {
   try {
     // Normalise status case to match DB constraints
     const statusVal = status.toLowerCase() === 'ralan' ? 'Ralan' : 'Ranap';
-    const statusPenyakitVal = status_penyakit && status_penyakit.toLowerCase() === 'lama' ? 'Lama' : 'Baru';
+    const statusPenyakitVal =
+      status_penyakit && status_penyakit.toLowerCase() === 'lama' ? 'Lama' : 'Baru';
 
     const data = {
       no_rawat,
       kd_penyakit,
       status: statusVal,
       prioritas: Number.parseInt(prioritas, 10) || 1,
-      status_penyakit: statusPenyakitVal
+      status_penyakit: statusPenyakitVal,
     };
 
     // Prevent duplicate entries
@@ -210,7 +228,7 @@ exports.createProcedure = async (req, res) => {
       kode,
       status: statusVal,
       prioritas: Number.parseInt(prioritas, 10) || 1,
-      jumlah: String(jumlah || '1')
+      jumlah: String(jumlah || '1'),
     };
 
     // Prevent duplicate entries
@@ -219,9 +237,7 @@ exports.createProcedure = async (req, res) => {
       .first();
 
     if (existing) {
-      await knex('prosedur_pasien')
-        .where({ no_rawat, kode, status: statusVal })
-        .update(data);
+      await knex('prosedur_pasien').where({ no_rawat, kode, status: statusVal }).update(data);
     } else {
       await knex('prosedur_pasien').insert(data);
     }

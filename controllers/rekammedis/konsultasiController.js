@@ -43,7 +43,9 @@ exports.getIncomingConsultations = async (req, res) => {
         'jkm.tanggal as tanggal_jawaban',
         'jkm.diagnosa_kerja as diagnosa_kerja_jawaban',
         'jkm.uraian_jawaban as jawaban',
-        knex.raw("CASE WHEN jkm.uraian_jawaban IS NOT NULL THEN 'Sudah Dijawab' ELSE 'Belum Dijawab' END as status")
+        knex.raw(
+          "CASE WHEN jkm.uraian_jawaban IS NOT NULL THEN 'Sudah Dijawab' ELSE 'Belum Dijawab' END as status"
+        )
       )
       .where('km.kd_dokter_dikonsuli', doctorNik);
 
@@ -102,7 +104,9 @@ exports.getOutgoingConsultations = async (req, res) => {
         'jkm.tanggal as tanggal_jawaban',
         'jkm.diagnosa_kerja as diagnosa_kerja_jawaban',
         'jkm.uraian_jawaban as jawaban',
-        knex.raw("CASE WHEN jkm.uraian_jawaban IS NOT NULL THEN 'Sudah Dijawab' ELSE 'Belum Dijawab' END as status")
+        knex.raw(
+          "CASE WHEN jkm.uraian_jawaban IS NOT NULL THEN 'Sudah Dijawab' ELSE 'Belum Dijawab' END as status"
+        )
       )
       .where('km.kd_dokter', doctorNik);
 
@@ -148,8 +152,25 @@ exports.getDoctorsList = async (req, res) => {
 
 // ── CREATE CONSULTATION REQUEST ──────────────────────────────────────────────
 
+const JENIS_PERMINTAAN_ENUM = [
+  'Konsultasi',
+  'Evaluasi',
+  'Rawat Bersama',
+  'Alih Rawat',
+  'Pre/Post Operasi',
+];
+const URAIAN_MAX_LEN = 800;
+const LEGACY_ATTACHMENT_RE = /\n\[Attachment:\s*(.+?)\]\s*$/;
+
 exports.createConsultationRequest = async (req, res) => {
-  const { no_rawat, jenis_permintaan, kd_dokter_dikonsuli, diagnosa_kerja, uraian_konsultasi } = req.body;
+  const {
+    no_rawat,
+    jenis_permintaan,
+    kd_dokter_dikonsuli,
+    diagnosa_kerja,
+    uraian_konsultasi,
+    lampiran,
+  } = req.body;
   const doctorNik = req.user?.username;
 
   if (!doctorNik) {
@@ -160,10 +181,35 @@ exports.createConsultationRequest = async (req, res) => {
   const validateErrors = validateParams(req, res, queryParams);
   if (validateErrors) return;
 
+  if (!JENIS_PERMINTAAN_ENUM.includes(jenis_permintaan)) {
+    return response.badRequest(
+      req,
+      res,
+      `jenis_permintaan harus salah satu dari: ${JENIS_PERMINTAAN_ENUM.join(', ')}`
+    );
+  }
+
+  // Attachments travel inside uraian_konsultasi as `[Attachment: URL]`
+  // markers (app renders them from the text; no extra column on the
+  // legacy table). uraian_konsultasi is varchar(800): the marker must
+  // always fit, so the free-text core is trimmed to make room for it —
+  // the marker itself is never truncated.
+  let uraian = String(uraian_konsultasi || '').trim();
+  let lampiranVal = typeof lampiran === 'string' ? lampiran.trim() : '';
+  const legacyMatch = uraian.match(LEGACY_ATTACHMENT_RE);
+  if (legacyMatch) {
+    if (!lampiranVal) lampiranVal = legacyMatch[1].trim();
+    uraian = uraian.replace(LEGACY_ATTACHMENT_RE, '').trimEnd();
+  }
+  lampiranVal = lampiranVal.slice(0, 2000);
+  const marker = lampiranVal ? `\n[Attachment: ${lampiranVal}]` : '';
+  const maxUraianLen = URAIAN_MAX_LEN - marker.length;
+  const finalUraian = (uraian.slice(0, maxUraianLen) + marker).slice(0, URAIAN_MAX_LEN);
+
   try {
     const today = dayjs().format('YYYY-MM-DD');
     const todayStr = dayjs().format('YYYYMMDD');
-    
+
     let data;
     await knex.transaction(async (trx) => {
       // Auto-generate no_permintaan matching: KM + YYYYMMDD + 4 digits sequence with row/table lock
@@ -185,7 +231,7 @@ exports.createConsultationRequest = async (req, res) => {
         kd_dokter: doctorNik,
         kd_dokter_dikonsuli,
         diagnosa_kerja: diagnosa_kerja || '',
-        uraian_konsultasi: uraian_konsultasi || '',
+        uraian_konsultasi: finalUraian,
       };
 
       await trx('konsultasi_medik').insert(data);
@@ -201,10 +247,13 @@ exports.createConsultationRequest = async (req, res) => {
         .select('poliklinik.nm_poli', 'pasien.nm_pasien')
         .where('reg_periksa.no_rawat', no_rawat)
         .first();
-      
+
       if (regInfo) {
         nmPasien = regInfo.nm_pasien;
-        if (regInfo.nm_poli.toUpperCase().includes('IGD') || regInfo.nm_poli.toUpperCase().includes('GAWAT DARURAT')) {
+        if (
+          regInfo.nm_poli.toUpperCase().includes('IGD') ||
+          regInfo.nm_poli.toUpperCase().includes('GAWAT DARURAT')
+        ) {
           isIgd = true;
         }
       }
@@ -255,9 +304,7 @@ exports.respondToConsultation = async (req, res) => {
 
   try {
     // Check if the consultation request exists and matches the logged-in doctor as target
-    const consult = await knex('konsultasi_medik')
-      .where({ no_permintaan })
-      .first();
+    const consult = await knex('konsultasi_medik').where({ no_permintaan }).first();
 
     if (!consult) {
       return response.failedUpdate(res, 'Permintaan konsultasi tidak ditemukan');
@@ -281,9 +328,7 @@ exports.respondToConsultation = async (req, res) => {
       .first();
 
     if (existingResponse) {
-      await knex('jawaban_konsultasi_medik')
-        .where({ no_permintaan })
-        .update(responseData);
+      await knex('jawaban_konsultasi_medik').where({ no_permintaan }).update(responseData);
     } else {
       await knex('jawaban_konsultasi_medik').insert(responseData);
     }
@@ -291,7 +336,10 @@ exports.respondToConsultation = async (req, res) => {
     // Send real-time SSE notification
     try {
       const { sendNotification } = require('../../controllers/main/notificationController');
-      const responder = await knex('dokter').where('kd_dokter', doctorNik).select('nm_dokter').first();
+      const responder = await knex('dokter')
+        .where('kd_dokter', doctorNik)
+        .select('nm_dokter')
+        .first();
       await sendNotification(consult.kd_dokter, 'consultation_response', {
         no_permintaan,
         tgl_jawab: responseData.tanggal,

@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { logger } = require('../middleware/logger');
+const { redact } = require('./sensitive');
 
 const UAParser = require('ua-parser-js');
 
@@ -42,11 +43,10 @@ const auditTrail = (moduleName) => {
       let user = 'Unknown User';
       try {
         const body = c.get('body') || {};
-        const filteredBody = { ...body };
-        if (filteredBody.password) filteredBody.password = undefined;
-
-        const payload = JSON.stringify(filteredBody);
-        const ip = c.req.header('x-forwarded-for') || '0.0.0.0';
+        const payload = JSON.stringify(redact(body));
+        const trustProxy = process.env.TRUST_PROXY === 'true';
+        const rawIp = c.req.raw?.socket?.remoteAddress || '0.0.0.0';
+        const ip = trustProxy ? c.req.header('x-forwarded-for') || rawIp : rawIp;
         const route = c.req.path;
         const deviceInfo = parseUserAgent(c.req.header('user-agent'));
 

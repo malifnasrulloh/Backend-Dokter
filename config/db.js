@@ -2,7 +2,8 @@ const mysql = require('mysql2/promise');
 const { logger } = require('../middleware/logger');
 
 const DISABLE_QUERY_LOG = process.env.DISABLE_QUERY_LOG === 'true';
-const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const _IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const SLOW_QUERY_MS = Number.parseInt(process.env.SLOW_QUERY_MS, 10) || 1000;
 
 const db = mysql.createPool({
   host: process.env.DB_HOST,
@@ -12,10 +13,7 @@ const db = mysql.createPool({
   database: process.env.DB_NAME,
   waitForConnections: true,
 
-  connectionLimit: Number.parseInt(
-    process.env.DB_CONNECTION_LIMIT,
-    10
-  ),
+  connectionLimit: Number.parseInt(process.env.DB_CONNECTION_LIMIT, 10),
   queueLimit: 0,
   connectTimeout: 10000,
   idleTimeout: 60000,
@@ -59,9 +57,13 @@ db.getConnection = async () => {
 
   const timeoutId = setTimeout(() => {
     if (!isReleased) {
-      logger.error(`[DB-LEAK-DETECT] KONEKSI BOCOR terdeteksi (tidak di-release > 30s)! Dibuat di:\n${acquireStack}`);
+      logger.error(
+        `[DB-LEAK-DETECT] KONEKSI BOCOR terdeteksi (tidak di-release > 30s)! Dibuat di:\n${acquireStack}`
+      );
       try {
-        logger.warn(`[DB-LEAK-DETECT] Memaksa destroy koneksi bocor untuk memutus koneksi idle di MySQL.`);
+        logger.warn(
+          `[DB-LEAK-DETECT] Memaksa destroy koneksi bocor untuk memutus koneksi idle di MySQL.`
+        );
         conn.destroy();
       } catch (err) {
         logger.error(`[DB-LEAK-DETECT] Gagal force destroy koneksi bocor: ${err.message}`);
@@ -78,14 +80,18 @@ db.getConnection = async () => {
 
   conn.query = async (sql, values) => {
     if (isReleased) {
-      logger.warn(`[DB-WARN] Query dipanggil pada koneksi yang sudah di-release/destroy!\nQuery: ${sql}`);
+      logger.warn(
+        `[DB-WARN] Query dipanggil pada koneksi yang sudah di-release/destroy!\nQuery: ${sql}`
+      );
     }
     return runAndLog(originalConnQuery, sql, values);
   };
 
   conn.execute = async (sql, values) => {
     if (isReleased) {
-      logger.warn(`[DB-WARN] Execute dipanggil pada koneksi yang sudah di-release/destroy!\nQuery: ${sql}`);
+      logger.warn(
+        `[DB-WARN] Execute dipanggil pada koneksi yang sudah di-release/destroy!\nQuery: ${sql}`
+      );
     }
     return runAndLog(originalConnExecute, sql, values);
   };
@@ -217,7 +223,7 @@ async function runAndLog(fn, sql, values, retryCount = 0) {
     if (!DISABLE_QUERY_LOG) {
       const queryStr = typeof sql === 'string' ? sql : sql.sql;
 
-      if (duration > 1000) {
+      if (duration > SLOW_QUERY_MS) {
         logger.warn(`SLOW QUERY (${duration}ms): ${queryStr}`, { duration, values });
       }
 

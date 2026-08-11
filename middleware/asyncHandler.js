@@ -90,7 +90,7 @@ const asyncHandler = (fn) => {
 
         if (data && typeof data === 'object') {
           // 1. BPJS VClaim / Antrean / Apotek metadata format
-          if (data.metaData && data.metaData.message) {
+          if (data.metaData?.message) {
             logMessage(
               'warning',
               `[${requestId}] ${method} ${url} from ${ip} — AxiosError (BPJS API ${status}): ${data.metaData.message}`
@@ -99,9 +99,17 @@ const asyncHandler = (fn) => {
           }
 
           // 2. SatuSehat FHIR OperationOutcome format
-          if (data.resourceType === 'OperationOutcome' && Array.isArray(data.issue) && data.issue.length > 0) {
+          if (
+            data.resourceType === 'OperationOutcome' &&
+            Array.isArray(data.issue) &&
+            data.issue.length > 0
+          ) {
             const issue = data.issue[0];
-            const issueDetails = issue.diagnostics || issue.details?.text || issue.expression?.join(', ') || 'Unknown FHIR Error';
+            const issueDetails =
+              issue.diagnostics ||
+              issue.details?.text ||
+              issue.expression?.join(', ') ||
+              'Unknown FHIR Error';
             logMessage(
               'warning',
               `[${requestId}] ${method} ${url} from ${ip} — AxiosError (SatuSehat API ${status}): ${issueDetails}`

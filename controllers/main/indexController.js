@@ -3,15 +3,15 @@ const db = require('../../config/db');
 const os = require('node:os');
 const cache = require('../../utils/cache');
 
-exports.getIndex = async (req, res) => {
+exports.getIndex = async (_req, res) => {
   return response.ok(res, null, 'API by RS Islam Aminah');
 };
 
-exports.postIndex = async (req, res) => {
+exports.postIndex = async (_req, res) => {
   return response.ok(res, null, 'API by RS Islam Aminah');
 };
 
-exports.healthCheck = async (req, res) => {
+exports.healthCheck = async (_req, res) => {
   const startTime = Date.now();
   const checks = {
     server: 'healthy',

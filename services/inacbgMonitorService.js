@@ -26,13 +26,7 @@ async function poll() {
   try {
     // Get active Ranap patients WITH perkiraan_biaya_ranap tariff
     const patients = await knex('reg_periksa as rp')
-      .select(
-        'rp.no_rawat',
-        'rp.kd_dokter',
-        'rp.biaya_reg',
-        'pbr.tarif as estimasi',
-        'p.nm_pasien'
-      )
+      .select('rp.no_rawat', 'rp.kd_dokter', 'rp.biaya_reg', 'pbr.tarif as estimasi', 'p.nm_pasien')
       .innerJoin('perkiraan_biaya_ranap as pbr', 'rp.no_rawat', 'pbr.no_rawat')
       .leftJoin('pasien as p', 'rp.no_rkm_medis', 'p.no_rkm_medis')
       .where('rp.status_lanjut', 'Ranap')
@@ -50,7 +44,8 @@ async function poll() {
       if (estimasi <= 0) continue;
 
       // Same query as perkiraanBiayaController.js — raw source table totals
-      const [rows] = await knex.raw(`
+      const [rows] = await knex.raw(
+        `
         SELECT
           COALESCE((
             SELECT COALESCE(SUM(bhp), 0) FROM rawat_jl_pr WHERE no_rawat = ?
@@ -141,7 +136,9 @@ async function poll() {
           COALESCE((
             SELECT COALESCE(SUM(besar_pengurangan), 0) FROM pengurangan_biaya WHERE no_rawat = ?
           ), 0) AS potongan
-      `, Array(34).fill(n));
+      `,
+        Array(34).fill(n)
+      );
 
       const d = rows[0] || {};
       const bhp = Number(d.bhp) || 0;
@@ -166,9 +163,11 @@ async function poll() {
       for (const threshold of THRESHOLDS) {
         if (ratio >= threshold && !already.has(threshold)) {
           const eventName =
-            threshold === 80 ? 'billing_threshold_80'
-            : threshold === 100 ? 'billing_threshold_100'
-            : 'billing_threshold_120';
+            threshold === 80
+              ? 'billing_threshold_80'
+              : threshold === 100
+                ? 'billing_threshold_100'
+                : 'billing_threshold_120';
 
           await enqueueNotification(pt.kd_dokter, eventName, {
             no_rawat: n,
@@ -181,7 +180,9 @@ async function poll() {
           already.add(threshold);
           alerted.set(n, already);
 
-          logger.info(`[INACBG] Alerted ${pt.kd_dokter} for ${n}: ${ratio}% (threshold ${threshold}%)`);
+          logger.info(
+            `[INACBG] Alerted ${pt.kd_dokter} for ${n}: ${ratio}% (threshold ${threshold}%)`
+          );
         }
       }
     }

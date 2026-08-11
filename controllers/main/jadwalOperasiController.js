@@ -138,7 +138,7 @@ const fetchBedData = async () => {
   };
 };
 
-exports.getBed = async (req, res) => {
+exports.getBed = async (_req, res) => {
   const cache = require('../../utils/cache');
   const cacheKey = 'bed_availability_data';
 

@@ -132,7 +132,7 @@ exports.getPerkiraanBiaya = async (req, res) => {
             ORDER BY dp.prioritas ASC
           `,
             [noRawatList]
-          )
+          ),
         ]);
 
         const dpjpMap = {};
@@ -318,7 +318,8 @@ exports.getPerkiraanBiaya = async (req, res) => {
             persentase_penunjang = (jumlah_penunjang / perkiraan_tarif) * 100;
           }
 
-          const status_keamanan = (perkiraan_tarif > 0 && perkiraan_tarif <= total_biaya) ? 'Tidak Aman' : 'Aman';
+          const status_keamanan =
+            perkiraan_tarif > 0 && perkiraan_tarif <= total_biaya ? 'Tidak Aman' : 'Aman';
 
           const list_dpjp = dpjpMap[row.no_rawat] || [];
           const all_doctors = [row.dokter_reg, ...list_dpjp].filter(Boolean);
@@ -361,13 +362,13 @@ exports.getPerkiraanBiaya = async (req, res) => {
               persentase_rs: Number(persentase_rs.toFixed(2)),
               persentase_jasa: Number(persentase_jasa.toFixed(2)),
               persentase_penunjang: Number(persentase_penunjang.toFixed(2)),
-            }
+            },
           };
         });
 
         return await Promise.all(detailPromises);
       },
-      5
+      60
     );
 
     if (!cachedResult || cachedResult.length === 0) {
@@ -391,7 +392,11 @@ exports.getPerkiraanBiaya = async (req, res) => {
 
     for (const item of cachedResult) {
       total_bhp += item.cost_details.bhp;
-      total_registrasi_kamar_harian_rs += item.cost_details.registrasi + item.cost_details.kamar + item.cost_details.harian + item.cost_details.rumahsakit;
+      total_registrasi_kamar_harian_rs +=
+        item.cost_details.registrasi +
+        item.cost_details.kamar +
+        item.cost_details.harian +
+        item.cost_details.rumahsakit;
       total_jasa += item.cost_details.jasa;
       total_penunjang += item.cost_details.jumlah_penunjang;
       total_potongan += item.cost_details.potongan;
@@ -428,7 +433,13 @@ exports.getPerkiraanBiaya = async (req, res) => {
       lastPage: Math.ceil(total / limit),
     };
 
-    return response.okPagination(res, cachedResult, pagination, 'Berhasil menampilkan perkiraan biaya pasien', { summary });
+    return response.okPagination(
+      res,
+      cachedResult,
+      pagination,
+      'Berhasil menampilkan perkiraan biaya pasien',
+      { summary }
+    );
   } catch (error) {
     return response.internalError(req, res, error, 'Gagal menampilkan perkiraan biaya pasien');
   }

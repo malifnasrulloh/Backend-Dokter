@@ -4,14 +4,8 @@ const router = new Hono();
 const resepController = require('../../controllers/rekammedis/resepController');
 const auditTrail = require('../../middleware/auditTrail');
 
-router.get(
-  '/obat-list',
-  asyncHandler(resepController.getMedicineList)
-);
-router.get(
-  '/',
-  asyncHandler(resepController.getPrescriptions)
-);
+router.get('/obat-list', asyncHandler(resepController.getMedicineList));
+router.get('/', asyncHandler(resepController.getPrescriptions));
 router.post(
   '/',
   auditTrail('Create Prescription'),

@@ -1,7 +1,7 @@
 const db = require('../../config/db');
 const response = require('../../middleware/responseHandler');
 
-exports.getSetting = async (req, res) => {
+exports.getSetting = async (_req, res) => {
   const [rows] = await db.query(`
     SELECT 
       nama_instansi, alamat_instansi, kabupaten, propinsi, kontak, email, 
@@ -36,10 +36,10 @@ exports.updateSetting = async (req, res) => {
 };
 
 // Broadcast tidak dipakai di backend dokter (tanpa websocket)
-exports.getBroadcast = async (req, res) => {
+exports.getBroadcast = async (_req, res) => {
   return response.ok(res, { broadcast_info: '', broadcast_active: false });
 };
 
-exports.updateBroadcast = async (req, res) => {
+exports.updateBroadcast = async (_req, res) => {
   return response.ok(res, null, 'Broadcast tidak tersedia di backend dokter');
 };

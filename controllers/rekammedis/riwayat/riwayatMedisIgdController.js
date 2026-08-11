@@ -66,4 +66,3 @@ exports.getRiwayatMedisIgd = async (req, res) => {
   }
   return response.ok(res, rows);
 };
-

@@ -1,6 +1,6 @@
 const Redis = require('ioredis');
 const { logger } = require('../middleware/logger');
-const EventEmitter = require('events');
+const EventEmitter = require('node:events');
 
 // Cek env REDIS_ENABLED. Default ke true jika tidak diset.
 const redisEnabled = process.env.REDIS_ENABLED !== 'false';
@@ -41,14 +41,30 @@ if (redisEnabled) {
       super();
       this.status = 'disabled';
     }
-    async get() { return null; }
-    async set() { return 'OK'; }
-    async del() { return 0; }
-    async keys() { return []; }
-    async flushdb() { return 'OK'; }
-    async incr() { return 0; }
-    async expire() { return 0; }
-    quit() { return Promise.resolve(); }
+    async get() {
+      return null;
+    }
+    async set() {
+      return 'OK';
+    }
+    async del() {
+      return 0;
+    }
+    async keys() {
+      return [];
+    }
+    async flushdb() {
+      return 'OK';
+    }
+    async incr() {
+      return 0;
+    }
+    async expire() {
+      return 0;
+    }
+    quit() {
+      return Promise.resolve();
+    }
     disconnect() {}
   }
   redis = new DummyRedis();
@@ -56,4 +72,3 @@ if (redisEnabled) {
 }
 
 module.exports = redis;
-

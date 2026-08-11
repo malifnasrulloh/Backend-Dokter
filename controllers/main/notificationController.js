@@ -36,22 +36,22 @@ exports.sseNotificationConnection = async (c) => {
     // Send initial handshake message
     await stream.writeSSE({
       event: 'handshake',
-      data: JSON.stringify({ status: 'connected', timestamp: new Date().toISOString() })
+      data: JSON.stringify({ status: 'connected', timestamp: new Date().toISOString() }),
     });
 
     // Keep connection alive with periodic pings every 30 seconds
     while (!isAborted) {
       await stream.sleep(30000);
       if (isAborted) break; // Check flag immediately after waking up
-      
+
       try {
         await stream.writeSSE({
           event: 'ping',
-          data: 'keep-alive'
+          data: 'keep-alive',
         });
-      } catch (err) {
+      } catch (_err) {
         // Stream was closed unexpectedly during write
-        break; 
+        break;
       }
     }
   });
@@ -84,18 +84,20 @@ exports.sendNotification = async (targetNik, eventName, data) => {
 
   for (const stream of streams) {
     sendPromises.push(
-      stream.writeSSE({
-        event: eventName,
-        data: payload
-      }).catch((err) => {
-        logger.error(`[SSE] Failed writing to stream for ${targetNik}:`, err);
-        
-        // FIX 1: Clean up "zombie" streams that failed to write (silent disconnects)
-        streams.delete(stream);
-        if (streams.size === 0) {
-          activeDoctorStreams.delete(targetNik);
-        }
-      })
+      stream
+        .writeSSE({
+          event: eventName,
+          data: payload,
+        })
+        .catch((err) => {
+          logger.error(`[SSE] Failed writing to stream for ${targetNik}:`, err);
+
+          // FIX 1: Clean up "zombie" streams that failed to write (silent disconnects)
+          streams.delete(stream);
+          if (streams.size === 0) {
+            activeDoctorStreams.delete(targetNik);
+          }
+        })
     );
   }
 

@@ -2,6 +2,8 @@ const dayjs = require('dayjs');
 const { calculateAge } = require('../../utils/dateHelper');
 const validateParams = require('../../middleware/validateParams');
 const response = require('../../middleware/responseHandler');
+const { logger } = require('../../middleware/logger');
+const db = require('../../config/db');
 const ref = require('../../utils/referenceCache');
 const { buildSimpleOrder } = require('../../utils/paginationHelper');
 const pasienRepo = require('../../repositories/pasienRepository');
@@ -132,7 +134,8 @@ exports.cariByNoRawat = async (req, res) => {
   if (!no_rawat) return response.badRequest(res, 'Parameter no_rawat wajib diisi');
 
   try {
-    const [rows] = await db.query(`
+    const [rows] = await db.query(
+      `
       SELECT
         rp.no_rawat, rp.no_rkm_medis, rp.kd_dokter,
         p.nm_pasien, rp.status_lanjut AS _type, pj.png_jawab
@@ -141,7 +144,9 @@ exports.cariByNoRawat = async (req, res) => {
       LEFT JOIN penjab pj ON rp.kd_pj = pj.kd_pj
       WHERE rp.no_rawat = ?
       LIMIT 1
-    `, [no_rawat]);
+    `,
+      [no_rawat]
+    );
 
     if (rows.length === 0) return response.noContent(res, 'Data pasien tidak ditemukan');
     return response.ok(res, rows[0]);

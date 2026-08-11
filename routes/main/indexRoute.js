@@ -1,7 +1,7 @@
 const { Hono } = require('hono');
-const asyncHandler = require('../../middleware/asyncHandler');
+const _asyncHandler = require('../../middleware/asyncHandler');
 const router = new Hono();
-const indexController = require('../../controllers/main/indexController');
+const _indexController = require('../../controllers/main/indexController');
 const validateTokenJWT = require('../../middleware/validateTokenJwt');
 const db = require('../../config/db');
 const cache = require('../../utils/cache');
@@ -62,7 +62,10 @@ router.get('/health/detail', validateTokenJWT, async (c) => {
   checks.cache = cache.stats();
   checks.responseTime = `${Date.now() - startTime}ms`;
   const isHealthy = checks.database === 'healthy';
-  return c.json({ code: isHealthy ? 200 : 503, success: isHealthy, data: checks }, isHealthy ? 200 : 503);
+  return c.json(
+    { code: isHealthy ? 200 : 503, success: isHealthy, data: checks },
+    isHealthy ? 200 : 503
+  );
 });
 
 // ── AUTH ─────────────────────────────────────────────────────────────────────
@@ -87,7 +90,11 @@ router.use('/jadwal/*', validateTokenJWT);
 router.route('/jadwal', require('./jadwalRoute'));
 
 // ── PASIEN DETAIL (Lightweight — for notification routing) ────────────────────
-router.get('/pasien/cari-by-rawat', validateTokenJWT, require('../../controllers/main/pasienController').cariByNoRawat);
+router.get(
+  '/pasien/cari-by-rawat',
+  validateTokenJWT,
+  require('../../controllers/main/pasienController').cariByNoRawat
+);
 
 const writeAccessMiddleware = require('../../middleware/writeAccessMiddleware');
 
@@ -122,11 +129,23 @@ router.use('/soap/*', validateTokenJWT);
 router.use('/soap/*', writeAccessMiddleware());
 router.route('/soap', require('../rekammedis/soapRoute'));
 
-  // ── NOTIFICATION QUEUE (DB-backed polling) ────────────────────────────────────
-  router.get('/notifications/poll', validateTokenJWT, require('../../controllers/main/notificationQueueController').pollNotifications);
-  router.post('/notifications/ack', validateTokenJWT, require('../../controllers/main/notificationQueueController').ackNotifications);
-  // DEPRECATED: SSE — kept for backward compat; remove after migration validated
-router.get('/notifications', validateTokenJWT, require('../../controllers/main/notificationController').sseNotificationConnection);
+// ── NOTIFICATION QUEUE (DB-backed polling) ────────────────────────────────────
+router.get(
+  '/notifications/poll',
+  validateTokenJWT,
+  require('../../controllers/main/notificationQueueController').pollNotifications
+);
+router.post(
+  '/notifications/ack',
+  validateTokenJWT,
+  require('../../controllers/main/notificationQueueController').ackNotifications
+);
+// DEPRECATED: SSE — kept for backward compat; remove after migration validated
+router.get(
+  '/notifications',
+  validateTokenJWT,
+  require('../../controllers/main/notificationController').sseNotificationConnection
+);
 
 // ── KONSULTASI MEDIK ──────────────────────────────────────────────────────────
 router.use('/konsultasi/*', validateTokenJWT);
@@ -142,21 +161,5 @@ router.route('/resep', require('../rekammedis/resepRoute'));
 router.use('/diagnosa-prosedur/*', validateTokenJWT);
 router.use('/diagnosa-prosedur/*', writeAccessMiddleware());
 router.route('/diagnosa-prosedur', require('../rekammedis/diagnosaRoute'));
-
-// ── TEST NOTIFICATION ENDPOINT ────────────────────────────────────────────────
-router.get('/test-notification', validateTokenJWT, async (c) => {
-  const { sendNotification } = require('../../controllers/main/notificationController');
-  const doctorNik = c.get('user')?.username;
-  const event = c.req.query('event') || 'new_admission';
-  
-  await sendNotification(doctorNik, event, {
-    no_rawat: '2026/07/03/0001',
-    nm_pasien: 'Pasien Uji Coba Notifikasi',
-    nm_dokter_pemberi: 'Sistem Admin',
-    pesan: 'Ini adalah notifikasi uji coba dari sistem backend.'
-  });
-  
-  return c.json({ success: true, message: `Notification of type ${event} sent to ${doctorNik}` });
-});
 
 module.exports = router;

@@ -122,7 +122,6 @@ Thumbs.db
 # Project specific
 # ecosystem.config.js
 yarn.lock
-package-lock.json
 controllers/klaim/eklaim/output
 utils/poppler-25.07.0
 nodemon.json

@@ -1,8 +1,9 @@
 const jose = require('jose');
 const { z } = require('zod');
 const db = require('../../config/db');
-const validateParams = require('../../middleware/validateParams');
+const _validateParams = require('../../middleware/validateParams');
 const response = require('../../middleware/responseHandler');
+const { logger } = require('../../middleware/logger');
 
 const loginSchema = z.object({
   username: z.any().refine((val) => typeof val === 'string' && val.trim().length > 0, {
@@ -14,7 +15,7 @@ const loginSchema = z.object({
 });
 const redisClient = require('../../config/redis');
 
-const secretKey = new TextEncoder().encode(process.env.SECRETTOKEN);
+const secretKey = () => new TextEncoder().encode(process.env.SECRETTOKEN);
 
 // ── Brute-force lockout per username ─────────────────────────────────────────
 const LOGIN_MAX_ATTEMPTS = 5;
@@ -44,8 +45,14 @@ async function incrLoginAttempts(username) {
     return count;
   }
   const now = Date.now();
-  const entry = memLoginAttempts.get(username) || { count: 0, resetAt: now + LOGIN_WINDOW_SEC * 1000 };
-  if (now > entry.resetAt) { entry.count = 0; entry.resetAt = now + LOGIN_WINDOW_SEC * 1000; }
+  const entry = memLoginAttempts.get(username) || {
+    count: 0,
+    resetAt: now + LOGIN_WINDOW_SEC * 1000,
+  };
+  if (now > entry.resetAt) {
+    entry.count = 0;
+    entry.resetAt = now + LOGIN_WINDOW_SEC * 1000;
+  }
   entry.count++;
   memLoginAttempts.set(username, entry);
   return entry.count;
@@ -59,6 +66,28 @@ async function resetLoginAttempts(username) {
   memLoginAttempts.delete(username);
 }
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Credential check aligned with the Khanza reference implementation
+ * (SIMRS-Khanza-fork/src/fungsi/akses.java): passwords live in the legacy
+ * `user`/`admin` tables, AES_ENCRYPT'd with DB_AES_KEY_*; a user is an
+ * ADMIN only when username AND password also match the `admin` table.
+ */
+async function isAdminCredentials(username, password) {
+  try {
+    const [rows] = await db.query(
+      `SELECT 1 FROM admin
+        WHERE usere = AES_ENCRYPT(?, ?)
+          AND passworde = AES_ENCRYPT(?, ?)
+        LIMIT 1`,
+      [username, process.env.DB_AES_KEY_USER, password, process.env.DB_AES_KEY_PASS]
+    );
+    return rows.length > 0;
+  } catch (err) {
+    logger.error(`[AUTH] Cek admin gagal untuk ${username}: ${err.message}`);
+    return false;
+  }
+}
 
 exports.authentication = async (req, res) => {
   const { username, password } = req.body;
@@ -79,6 +108,10 @@ exports.authentication = async (req, res) => {
     );
   }
 
+  // Reference semantics (akses.java): admin credentials match username AND
+  // password against the `admin` table first; otherwise fall through to
+  // the `user` table. Compare via AES_ENCRYPT (deterministic, no decrypt
+  // casts) exactly like the desktop app.
   const queryadmin = `
   SELECT
     TRIM(CAST(AES_DECRYPT(usere, ?) AS CHAR))       AS username,
@@ -86,8 +119,8 @@ exports.authentication = async (req, res) => {
   FROM
     admin
   WHERE
-    TRIM(CAST(AES_DECRYPT(usere, ?) AS CHAR)) = ?
-    AND TRIM(CAST(AES_DECRYPT(passworde, ?) AS CHAR)) = ?`;
+    usere = AES_ENCRYPT(?, ?)
+    AND passworde = AES_ENCRYPT(?, ?)`;
 
   let dbColumns;
   const now = Date.now();
@@ -99,14 +132,12 @@ exports.authentication = async (req, res) => {
     cachedUserColumns = dbColumns;
     cachedUserColumnsExpiry = now + USER_COLUMNS_CACHE_TTL;
   }
-  const allowedAccessColumns = dbColumns.filter(
-    (col) => col !== 'id_user' && col !== 'password'
-  );
+  const allowedAccessColumns = dbColumns.filter((col) => col !== 'id_user' && col !== 'password');
 
   const selectFields = [
     'TRIM(CAST(AES_DECRYPT(id_user, ?) AS CHAR)) AS username',
     'TRIM(CAST(AES_DECRYPT(password, ?) AS CHAR)) AS password',
-    ...allowedAccessColumns
+    ...allowedAccessColumns,
   ].join(',\n    ');
 
   const query = `
@@ -115,23 +146,21 @@ exports.authentication = async (req, res) => {
     FROM
       user
     WHERE
-      TRIM(CAST(AES_DECRYPT(id_user, ?) AS CHAR)) = ?
-      AND TRIM(CAST(AES_DECRYPT(password, ?) AS CHAR)) = ?
-  `;
+      id_user = AES_ENCRYPT(?, ?)
+      AND password = AES_ENCRYPT(?, ?)`;
+
   const [rowsadmin] = await db.query(queryadmin, [
     process.env.DB_AES_KEY_USER,
     process.env.DB_AES_KEY_PASS,
-    process.env.DB_AES_KEY_USER,
     username,
-    process.env.DB_AES_KEY_PASS,
+    process.env.DB_AES_KEY_USER,
     password,
+    process.env.DB_AES_KEY_PASS,
   ]);
 
   const admin = rowsadmin[0];
-  let user = null;
-  let rows = [];
 
-  if (rowsadmin.length > 0) {
+  if (admin) {
     // Login admin sukses — reset counter
     await resetLoginAttempts(username);
 
@@ -150,7 +179,7 @@ exports.authentication = async (req, res) => {
 
     const token = await new jose.SignJWT(payload)
       .setProtectedHeader({ alg: 'HS256' })
-      .sign(secretKey);
+      .sign(secretKey());
 
     const [pjLab] = await db.query(`
       SELECT
@@ -173,7 +202,7 @@ exports.authentication = async (req, res) => {
     return response.ok(
       res,
       {
-        nama: 'Admin Ganteng',
+        nama: admin.username,
         jabatan: 'Admin All',
         kddokter: pj.kd_dokterrad || '',
         namadokter: pj.nm_dokterrad || '',
@@ -197,19 +226,22 @@ exports.authentication = async (req, res) => {
       }
     );
   }
+  let rows = [];
   [rows] = await db.query(query, [
     process.env.DB_AES_KEY_USER,
     process.env.DB_AES_KEY_PASS,
-    process.env.DB_AES_KEY_USER,
     username,
-    process.env.DB_AES_KEY_PASS,
+    process.env.DB_AES_KEY_USER,
     password,
+    process.env.DB_AES_KEY_PASS,
   ]);
-  user = rows[0];
+  const user = rows[0];
 
-  if (rows.length > 0) {
-    // Login user sukses — reset counter
+  if (user) {
+    // Login user sukses — reset counter; isadmin hanya jika kredensial
+    // (username + password) juga cocok dengan tabel admin (akses.java).
     await resetLoginAttempts(username);
+    const isadmin = await isAdminCredentials(username, password);
 
     const querydetail = `
     SELECT
@@ -245,7 +277,7 @@ exports.authentication = async (req, res) => {
 
     const token = await new jose.SignJWT(payload)
       .setProtectedHeader({ alg: 'HS256' })
-      .sign(secretKey);
+      .sign(secretKey());
 
     user.username = undefined;
     user.password = undefined;
@@ -297,7 +329,7 @@ exports.authentication = async (req, res) => {
       'Login berhasil',
       {
         token: token,
-        isadmin: username === 'K0000086',
+        isadmin: isadmin,
         userakses: filteredUserKeys,
       }
     );
@@ -305,14 +337,30 @@ exports.authentication = async (req, res) => {
     // Login gagal — increment counter, beri pesan umum
     const failCount = await incrLoginAttempts(username);
     const remaining = LOGIN_MAX_ATTEMPTS - failCount;
-    const msg = remaining > 0
-      ? `Username atau password salah. Sisa percobaan: ${remaining}`
-      : 'Akun dikunci karena terlalu banyak percobaan gagal. Coba lagi setelah 15 menit.';
+    const msg =
+      remaining > 0
+        ? `Username atau password salah. Sisa percobaan: ${remaining}`
+        : 'Akun dikunci karena terlalu banyak percobaan gagal. Coba lagi setelah 15 menit.';
     return response.badRequest(req, res, msg);
   }
 };
 
-exports.logout = async (req, res) => {
+exports.getCapabilities = async (_req, res) => {
+  const {
+    writeAccessEnabled,
+    WRITE_GATED_PREFIXES,
+  } = require('../../middleware/writeAccessMiddleware');
+  const writeAccess = writeAccessEnabled();
+
+  return response.ok(res, {
+    write_access: writeAccess,
+    write_endpoints: WRITE_GATED_PREFIXES,
+    notifications_enabled: process.env.NOTIFICATIONS_ENABLED !== 'false',
+    read_only: !writeAccess,
+  });
+};
+
+exports.logout = async (_req, res) => {
   res.clearCookie('token');
   return response.ok(res, null, 'Logout berhasil');
 };
@@ -347,14 +395,14 @@ exports.changePassword = async (req, res) => {
       TRIM(CAST(AES_DECRYPT(usere, ?) AS CHAR)) AS username,
       TRIM(CAST(AES_DECRYPT(passworde, ?) AS CHAR)) AS password
     FROM admin 
-    WHERE TRIM(CAST(AES_DECRYPT(usere, ?) AS CHAR)) = ?
+    WHERE usere = AES_ENCRYPT(?, ?)
   `;
 
   const [admins] = await db.query(queryAdmin, [
     process.env.DB_AES_KEY_USER,
     process.env.DB_AES_KEY_PASS,
-    process.env.DB_AES_KEY_USER,
     username,
+    process.env.DB_AES_KEY_USER,
   ]);
 
   if (admins.length > 0) {
@@ -363,36 +411,36 @@ exports.changePassword = async (req, res) => {
       return response.badRequest(res, 'Password lama salah');
     }
 
-    // Update password di tabel admin
+    // Update password di tabel admin (AES, sama seperti aplikasi desktop)
     const updateQuery = `
       UPDATE admin 
       SET passworde = AES_ENCRYPT(?, ?) 
-      WHERE TRIM(CAST(AES_DECRYPT(usere, ?) AS CHAR)) = ?
+      WHERE usere = AES_ENCRYPT(?, ?)
     `;
     await db.query(updateQuery, [
       newPassword,
       process.env.DB_AES_KEY_PASS,
-      process.env.DB_AES_KEY_USER,
       username,
+      process.env.DB_AES_KEY_USER,
     ]);
 
     return response.ok(res, null, 'Password admin berhasil diubah');
   }
 
-  // 2. Jika bukan admin utama, cek di tabel user (untuk pegawai biasa, termasuk K0000086)
+  // 2. Jika bukan admin utama, cek di tabel user
   const queryUser = `
     SELECT 
       TRIM(CAST(AES_DECRYPT(id_user, ?) AS CHAR)) AS username,
       TRIM(CAST(AES_DECRYPT(password, ?) AS CHAR)) AS password
     FROM user 
-    WHERE TRIM(CAST(AES_DECRYPT(id_user, ?) AS CHAR)) = ?
+    WHERE id_user = AES_ENCRYPT(?, ?)
   `;
 
   const [users] = await db.query(queryUser, [
     process.env.DB_AES_KEY_USER,
     process.env.DB_AES_KEY_PASS,
-    process.env.DB_AES_KEY_USER,
     username,
+    process.env.DB_AES_KEY_USER,
   ]);
 
   if (users.length > 0) {
@@ -401,17 +449,17 @@ exports.changePassword = async (req, res) => {
       return response.badRequest(res, 'Password lama salah');
     }
 
-    // Update password di tabel user
+    // Update password di tabel user (AES, sama seperti aplikasi desktop)
     const updateQuery = `
       UPDATE user 
       SET password = AES_ENCRYPT(?, ?) 
-      WHERE TRIM(CAST(AES_DECRYPT(id_user, ?) AS CHAR)) = ?
+      WHERE id_user = AES_ENCRYPT(?, ?)
     `;
     await db.query(updateQuery, [
       newPassword,
       process.env.DB_AES_KEY_PASS,
-      process.env.DB_AES_KEY_USER,
       username,
+      process.env.DB_AES_KEY_USER,
     ]);
 
     return response.ok(res, null, 'Password berhasil diubah');
@@ -449,12 +497,15 @@ exports.getHarianAccess = async (req, res) => {
     `);
 
     // 2. Fetch harian_dokter state from user table
-    const [users] = await db.query(`
+    const [users] = await db.query(
+      `
       SELECT 
         TRIM(CAST(AES_DECRYPT(id_user, ?) AS CHAR)) as username,
         harian_dokter
       FROM user
-    `, [process.env.DB_AES_KEY_USER]);
+    `,
+      [process.env.DB_AES_KEY_USER]
+    );
 
     const usersMap = {};
     for (const u of users) {
@@ -505,11 +556,7 @@ exports.updateHarianAccess = async (req, res) => {
       SET harian_dokter = ?
       WHERE TRIM(CAST(AES_DECRYPT(id_user, ?) AS CHAR)) = ?
     `;
-    const [result] = await db.query(updateQuery, [
-      val,
-      process.env.DB_AES_KEY_USER,
-      kd_dokter
-    ]);
+    const [result] = await db.query(updateQuery, [val, process.env.DB_AES_KEY_USER, kd_dokter]);
 
     if (result.affectedRows === 0) {
       return response.notFound(res, 'Pengguna (dokter) tidak ditemukan di tabel user');
@@ -520,5 +567,3 @@ exports.updateHarianAccess = async (req, res) => {
     return response.internalError(req, res, error);
   }
 };
-
-

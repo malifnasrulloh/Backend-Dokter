@@ -1,5 +1,5 @@
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const db = require('./db');
 const { logger } = require('../middleware/logger');
 
@@ -26,7 +26,8 @@ async function runMigrations() {
       fs.mkdirSync(migrationsDir, { recursive: true });
     }
 
-    const files = fs.readdirSync(migrationsDir)
+    const files = fs
+      .readdirSync(migrationsDir)
       .filter((file) => file.endsWith('.sql'))
       .sort();
 
@@ -35,7 +36,20 @@ async function runMigrations() {
       if (!executedMigrations.has(file)) {
         logger.info(`[MIGRATIONS] Mengeksekusi file migrasi: ${file}`);
         const filePath = path.join(migrationsDir, file);
-        const sqlContent = fs.readFileSync(filePath, 'utf8');
+        let sqlContent = fs.readFileSync(filePath, 'utf8');
+
+        // Resolve schema token so migration files never hardcode DB names.
+        const dbName = process.env.DB_NAME;
+        if (dbName && sqlContent.includes('{{DB_NAME}}')) {
+          sqlContent = sqlContent.replaceAll('{{DB_NAME}}', dbName);
+        }
+
+        // Strip full-line SQL comments before splitting so `;` inside
+        // prose (e.g. "do NOT re-run by hand.") cannot break statements.
+        sqlContent = sqlContent
+          .split('\n')
+          .filter((line) => !line.trimStart().startsWith('--'))
+          .join('\n');
 
         // Pisahkan query berdasarkan delimiter.
         // Default delimiter is ';'. Files with DELIMITER // require special
@@ -47,20 +61,35 @@ async function runMigrations() {
           const customDelim = delimiterLineMatch[1];
           const delimiterLineIndex = sqlContent.indexOf(delimiterLineMatch[0]);
           const beforeDelim = sqlContent.substring(0, delimiterLineIndex).trim();
-          const afterDelim = sqlContent.substring(delimiterLineIndex + delimiterLineMatch[0].length).trim();
+          const afterDelim = sqlContent
+            .substring(delimiterLineIndex + delimiterLineMatch[0].length)
+            .trim();
 
           // Part before DELIMITER: standard SQL split by ;
           if (beforeDelim) {
-            statements.push(...beforeDelim.split(';').map(s => s.trim()).filter(s => s.length > 0));
+            statements.push(
+              ...beforeDelim
+                .split(';')
+                .map((s) => s.trim())
+                .filter((s) => s.length > 0)
+            );
           }
           // Part after DELIMITER: split by custom delimiter; remove other DELIMITER lines
           const cleaned = afterDelim.replace(/^DELIMITER\s+\S+\s*$/gm, '');
           if (cleaned) {
-            statements.push(...cleaned.split(customDelim).map(s => s.trim()).filter(s => s.length > 0));
+            statements.push(
+              ...cleaned
+                .split(customDelim)
+                .map((s) => s.trim())
+                .filter((s) => s.length > 0)
+            );
           }
         } else {
           // Standard file — split by ;
-          statements = sqlContent.split(';').map(s => s.trim()).filter(s => s.length > 0);
+          statements = sqlContent
+            .split(';')
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
         }
 
         const conn = await db.getConnection();

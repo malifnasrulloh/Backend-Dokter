@@ -19,11 +19,11 @@ async function getUserAccess(username) {
   }
 
   // 2. Escape column names with backticks (Security/Syntax fix)
-  const escapedColumns = cachedUserColumns.map(col => `\`${col}\``);
-  
+  const escapedColumns = cachedUserColumns.map((col) => `\`${col}\``);
+
   const selectFields = [
     'TRIM(CAST(AES_DECRYPT(`id_user`, ?) AS CHAR)) AS `username`',
-    ...escapedColumns
+    ...escapedColumns,
   ].join(',\n    ');
 
   const queryUser = `
@@ -36,17 +36,19 @@ async function getUserAccess(username) {
   const [userRows] = await db.query(queryUser, [
     process.env.DB_AES_KEY_USER, // For SELECT decrypt
     process.env.DB_AES_KEY_USER, // For WHERE decrypt
-    username                     // For WHERE comparison
+    username, // For WHERE comparison
   ]);
 
   const userRecord = userRows[0];
   if (!userRecord) return [];
 
   // 4. Robust truthy check for access columns (Robustness fix)
-  return Object.keys(userRecord).filter((k) => {
-    const val = userRecord[k];
-    return val === 'true' || val === true || val === 1 || val === '1';
-  }).sort();
+  return Object.keys(userRecord)
+    .filter((k) => {
+      const val = userRecord[k];
+      return val === 'true' || val === true || val === 1 || val === '1';
+    })
+    .sort();
 }
 
 exports.getProfile = async (req, res) => {
@@ -61,8 +63,14 @@ exports.getProfile = async (req, res) => {
     const employee = await knex('pegawai')
       .leftJoin('departemen', 'pegawai.departemen', 'departemen.dep_id')
       .select(
-        'pegawai.nik', 'pegawai.nama', 'pegawai.jk', 'pegawai.jbtn as jabatan',
-        'departemen.nama as departemen', 'pegawai.alamat', 'pegawai.tmp_lahir', 'pegawai.tgl_lahir'
+        'pegawai.nik',
+        'pegawai.nama',
+        'pegawai.jk',
+        'pegawai.jbtn as jabatan',
+        'departemen.nama as departemen',
+        'pegawai.alamat',
+        'pegawai.tmp_lahir',
+        'pegawai.tgl_lahir'
       )
       .where('pegawai.nik', username)
       .first();
@@ -74,18 +82,23 @@ exports.getProfile = async (req, res) => {
     if (!employee) {
       return response.ok(res, {
         nik: username,
-        nama: username === 'sirs' ? 'Admin Sirs' : username,
+        nama: username,
         jabatan: 'Administrator',
         departemen: 'IT',
         is_dokter: false,
-        userakses: userakses
+        userakses: userakses,
       });
     }
 
     // 3. Fetch Doctor Data (if applicable)
     const doctor = await knex('dokter')
       .leftJoin('spesialis', 'dokter.kd_sps', 'spesialis.kd_sps')
-      .select('dokter.kd_dokter', 'dokter.nm_dokter', 'dokter.no_ijn_praktek', 'spesialis.nm_sps as spesialis')
+      .select(
+        'dokter.kd_dokter',
+        'dokter.nm_dokter',
+        'dokter.no_ijn_praktek',
+        'spesialis.nm_sps as spesialis'
+      )
       .where('dokter.kd_dokter', username)
       .first();
 
@@ -93,7 +106,8 @@ exports.getProfile = async (req, res) => {
     const profile = {
       nik: employee.nik,
       nama: employee.nama,
-      jenis_kelamin: employee.jk === 'L' ? 'Laki-laki' : employee.jk === 'P' ? 'Perempuan' : employee.jk,
+      jenis_kelamin:
+        employee.jk === 'L' ? 'Laki-laki' : employee.jk === 'P' ? 'Perempuan' : employee.jk,
       jabatan: employee.jabatan,
       departemen: employee.departemen,
       alamat: employee.alamat,
@@ -101,12 +115,14 @@ exports.getProfile = async (req, res) => {
       tanggal_lahir: employee.tgl_lahir,
       is_dokter: !!doctor,
       userakses: userakses,
-      dokter_info: doctor ? {
-        kd_dokter: doctor.kd_dokter,
-        nm_dokter: doctor.nm_dokter,
-        no_ijn_praktek: doctor.no_ijn_praktek,
-        spesialis: doctor.spesialis
-      } : null
+      dokter_info: doctor
+        ? {
+            kd_dokter: doctor.kd_dokter,
+            nm_dokter: doctor.nm_dokter,
+            no_ijn_praktek: doctor.no_ijn_praktek,
+            spesialis: doctor.spesialis,
+          }
+        : null,
     };
 
     return response.ok(res, profile);

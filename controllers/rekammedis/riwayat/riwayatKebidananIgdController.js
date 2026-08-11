@@ -51,4 +51,3 @@ exports.getKebidananIgd = async (req, res) => {
     return response.internalError(req, res, err);
   }
 };
-

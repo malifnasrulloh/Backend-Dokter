@@ -16,8 +16,14 @@ const riwayatBillingController = require('../../controllers/rekammedis/riwayat/r
 
 // Riwayat medis - RANAP
 router.get('/medis-ranap', asyncHandler(riwayatMedisRanapController.getRiwayatMedisRanap));
-router.get('/medis-ranap-neonatus', asyncHandler(riwayatMedisRanapController.getRiwayatMedisRanapNeonatus));
-router.get('/medis-ranap-kebidanan', asyncHandler(riwayatMedisRanapController.getRiwayatMedisRanapKebidanan));
+router.get(
+  '/medis-ranap-neonatus',
+  asyncHandler(riwayatMedisRanapController.getRiwayatMedisRanapNeonatus)
+);
+router.get(
+  '/medis-ranap-kebidanan',
+  asyncHandler(riwayatMedisRanapController.getRiwayatMedisRanapKebidanan)
+);
 
 // Riwayat medis - IGD
 router.get('/medis-igd', asyncHandler(riwayatMedisIgdController.getRiwayatMedisIgd));

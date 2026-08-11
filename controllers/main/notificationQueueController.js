@@ -6,6 +6,28 @@ const { logger } = require('../../middleware/logger');
  * Returns all pending notifications for a given device since its last_read_id.
  * Query params: device_id (required)
  */
+/**
+ * Retention policy (docs/ideas/notification-queue-db-backed.md):
+ *  - hard-delete delivered rows older than 7 days,
+ *  - hard-delete soft-deleted (source row removed) rows older than 1 day.
+ * Runs opportunistically on each poll — cheap on the small queue table.
+ */
+async function cleanupExpiredNotifications() {
+  try {
+    await knex('notification_queue')
+      .where(function () {
+        this.where('created_at', '<', knex.raw('NOW() - INTERVAL 7 DAY')).andWhere(
+          'deleted_at',
+          null
+        );
+      })
+      .orWhere('deleted_at', '<', knex.raw('NOW() - INTERVAL 1 DAY'))
+      .del();
+  } catch (err) {
+    logger.error('[NotificationQueue] Cleanup error:', err);
+  }
+}
+
 exports.pollNotifications = async (c) => {
   const nik = c.get('user')?.username;
   if (!nik) {
@@ -18,6 +40,8 @@ exports.pollNotifications = async (c) => {
     c.status(400);
     return c.json({ success: false, message: 'Parameter device_id wajib diisi' });
   }
+
+  await cleanupExpiredNotifications();
 
   try {
     // Get current device cursor (default 0 if no row)
@@ -37,9 +61,8 @@ exports.pollNotifications = async (c) => {
       .orderBy('id', 'asc')
       .limit(50);
 
-    const lastId = notifications.length > 0
-      ? notifications[notifications.length - 1].id
-      : lastReadId;
+    const lastId =
+      notifications.length > 0 ? notifications[notifications.length - 1].id : lastReadId;
 
     return c.json({
       success: true,

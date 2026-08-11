@@ -1,16 +1,36 @@
 const response = require('./responseHandler');
 
 /**
+ * Write-access policy (single source of truth, decision D8 — hospital
+ * default is READ-ONLY, ALLOW_MOBILE_WRITE=false).
+ *
+ * Previously /konsultasi, /dpjp-ranap and /pemeriksaan/validasi were
+ * exempted while SOAP/resep/diagnosa were blocked — inconsistent.
+ * Now every clinical write route follows the same flag.
+ */
+const WRITE_GATED_PREFIXES = [
+  '/dpjp-ranap',
+  '/pemeriksaan',
+  '/soap',
+  '/konsultasi',
+  '/resep',
+  '/diagnosa-prosedur',
+];
+
+function writeAccessEnabled() {
+  // Explicit opt-in only: unset/anything-but-true = read-only (fail-safe).
+  return process.env.ALLOW_MOBILE_WRITE === 'true';
+}
+
+/**
  * Hono middleware to reject write/modify requests when ALLOW_MOBILE_WRITE is set to false.
  */
 const writeAccessMiddleware = () => {
   return async (c, next) => {
-    const allowWrite = process.env.ALLOW_MOBILE_WRITE !== 'false';
+    const allowWrite = writeAccessEnabled();
     const method = c.req.method;
-    const path = c.req.path;
-    const isExempted = path.endsWith('/pemeriksaan/validasi') || path.includes('/konsultasi') || path.includes('/dpjp-ranap');
 
-    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method) && !allowWrite && !isExempted) {
+    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method) && !allowWrite) {
       const res = {
         _status: 403,
         status(code) {
@@ -33,3 +53,5 @@ const writeAccessMiddleware = () => {
 };
 
 module.exports = writeAccessMiddleware;
+module.exports.writeAccessEnabled = writeAccessEnabled;
+module.exports.WRITE_GATED_PREFIXES = WRITE_GATED_PREFIXES;

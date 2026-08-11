@@ -247,4 +247,3 @@ exports.getRiwayatMedisRanapKebidanan = async (req, res) => {
   }
   return response.ok(res, rows);
 };
-

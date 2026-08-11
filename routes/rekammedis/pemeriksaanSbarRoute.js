@@ -21,6 +21,10 @@ router.delete(
   auditTrail('Pemeriksaan SBAR'),
   asyncHandler(pemeriksaanSbarController.deletePemeriksaan)
 );
-router.post('/validasi', auditTrail('Pemeriksaan SBAR'), asyncHandler(pemeriksaanSbarController.validasiPemeriksaan));
+router.post(
+  '/validasi',
+  auditTrail('Pemeriksaan SBAR'),
+  asyncHandler(pemeriksaanSbarController.validasiPemeriksaan)
+);
 
 module.exports = router;

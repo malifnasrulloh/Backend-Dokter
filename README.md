@@ -163,6 +163,31 @@ Response sukses:
 }
 ```
 
+## ⚙️ Deployment Checklist (setelah `cp .env.example .env`)
+
+1. **Basis data** — targetkan schema SIMRS yang benar (`DB_NAME=sik`).
+2. **Migrasi + trigger notifikasi** (idempotent, aman diulang):
+   ```bash
+   npm run db:migrate       # 0001–0005 (tabel query_logs, audit, notification, hardening)
+   npm run db:triggers      # 52 trigger notifikasi (event set lengkap A-G)
+   ```
+   Verifikasi: `SHOW TRIGGERS` di DB target ≈ 28 baris; migrasi tercatat di tabel `migrations`.
+3. **Mapping identitas dokter** (NIK ↔ kode legacy `Dxxxx`):
+   ```bash
+   npm run db:map-dokter
+   ```
+4. **Security settings**:
+   - `SECRETTOKEN`: `openssl rand -hex 32` (wajib beda dari default).
+   - `ALLOW_MOBILE_WRITE=false` (default read-only, fail-safe) — app mempelajari
+     kebijakan lewat `GET /auth/capabilities`.
+   - `TRUST_PROXY=true` **hanya** jika ada reverse proxy tepercaya yang menimpa
+     `X-Forwarded-For`; jika langsung terekspos, biarkan `false`.
+   - `CORS_ORIGINS=https://edokter.rs.example.com` untuk build Flutter Web.
+   - `DB_AES_KEY_*` tidak boleh berubah — dipakai legacy SIMRS desktop/PHP dan
+     verifikasi AES fallback (bcrypt `password_hash` adalah primari untuk API).
+5. **Runtime**: `bun app.js` atau `node app.js` (keduanya didukung; Node ≥ 18).
+6. **Healthcheck**: `GET /api/health`, `GET /api/ready`, detail: `GET /api/health/detail` (JWT).
+
 ## ☕ Dukung Pengembang
 
 Jika tools ini membantu Anda atau rumah sakit Anda, Anda bisa memberikan dukungan melalui:

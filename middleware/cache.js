@@ -12,7 +12,6 @@ const cacheMiddleware = (duration) => {
     try {
       const cachedData = await cache.get(key);
       if (cachedData) {
-
         const responseData = { ...cachedData };
         responseData.cached = true;
         responseData.source = cache.stats().type;
@@ -25,8 +24,7 @@ const cacheMiddleware = (duration) => {
         try {
           const clone = c.res.clone();
           const body = await clone.json();
-          if (body && body.success) {
-
+          if (body?.success) {
             await cache.set(key, body, duration);
           }
         } catch (err) {

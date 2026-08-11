@@ -44,9 +44,9 @@ exports.getPemeriksaanById = async (req, res) => {
   const result = rows.map((row) => {
     const isAnswered = row.tgl_jawab !== null;
 
-    let status_validasi = isAnswered ? 'Validasi' : null;
-    let tgl_validasi = isAnswered ? dayjs(row.tgl_jawab).format('YYYY-MM-DD') : null;
-    let jam_validasi = isAnswered ? dayjs(row.tgl_jawab).format('HH:mm:ss') : null;
+    const status_validasi = isAnswered ? 'Validasi' : null;
+    const tgl_validasi = isAnswered ? dayjs(row.tgl_jawab).format('YYYY-MM-DD') : null;
+    const jam_validasi = isAnswered ? dayjs(row.tgl_jawab).format('HH:mm:ss') : null;
 
     return {
       no_permintaan: row.no_permintaan,
@@ -115,16 +115,7 @@ exports.createPemeriksaan = async (req, res) => {
       '-', '-', '-', '-', '-', '-', '-', '-', 'Compos Mentis',
       ?, ?, ?, ?, '-', '-', '', ?
     )`,
-    [
-      no_rawat,
-      tgl_perawatan,
-      jam_rawat,
-      situation,
-      background,
-      assesment,
-      recommendation,
-      nip,
-    ]
+    [no_rawat, tgl_perawatan, jam_rawat, situation, background, assesment, recommendation, nip]
   );
 
   if (result.affectedRows === 0) {
@@ -154,16 +145,7 @@ exports.updatePemeriksaan = async (req, res) => {
 
   const [result] = await db.query(
     'UPDATE pemeriksaan_ranap SET keluhan = ?, pemeriksaan = ?, penilaian = ?, rtl = ?, nip = ? WHERE no_rawat = ? AND tgl_perawatan = ? AND jam_rawat = ?',
-    [
-      situation,
-      background,
-      assesment,
-      recommendation,
-      nip,
-      no_rawat,
-      tgl_perawatan,
-      jam_rawat,
-    ]
+    [situation, background, assesment, recommendation, nip, no_rawat, tgl_perawatan, jam_rawat]
   );
 
   if (result.affectedRows === 0) {
@@ -195,7 +177,8 @@ exports.deletePemeriksaan = async (req, res) => {
 };
 
 exports.validasiPemeriksaan = async (req, res) => {
-  const { no_permintaan, no_rawat, tgl_perawatan, jam_rawat, nik, respon, instruksi, rencana } = req.body;
+  const { no_permintaan, no_rawat, tgl_perawatan, jam_rawat, respon, instruksi, rencana } =
+    req.body;
 
   let targetNoPermintaan = no_permintaan;
   if (!targetNoPermintaan && no_rawat && tgl_perawatan && jam_rawat) {
@@ -240,7 +223,13 @@ exports.validasiPemeriksaan = async (req, res) => {
     return response.failedSave(res);
   }
 
-  return response.created(res, { no_permintaan: targetNoPermintaan, tanggal: now, respon: responVal, instruksi: instruksiVal, rencana: rencanaVal });
+  return response.created(res, {
+    no_permintaan: targetNoPermintaan,
+    tanggal: now,
+    respon: responVal,
+    instruksi: instruksiVal,
+    rencana: rencanaVal,
+  });
 };
 
 exports.getPemeriksaanByDokter = async (req, res) => {
@@ -286,9 +275,9 @@ exports.getPemeriksaanByDokter = async (req, res) => {
   const result = rows.map((row) => {
     const isAnswered = row.tgl_jawab !== null;
 
-    let status_validasi = isAnswered ? 'Validasi' : null;
-    let tgl_validasi = isAnswered ? dayjs(row.tgl_jawab).format('YYYY-MM-DD') : null;
-    let jam_validasi = isAnswered ? dayjs(row.tgl_jawab).format('HH:mm:ss') : null;
+    const status_validasi = isAnswered ? 'Validasi' : null;
+    const tgl_validasi = isAnswered ? dayjs(row.tgl_jawab).format('YYYY-MM-DD') : null;
+    const jam_validasi = isAnswered ? dayjs(row.tgl_jawab).format('HH:mm:ss') : null;
 
     return {
       no_permintaan: row.no_permintaan,
@@ -320,4 +309,3 @@ exports.getPemeriksaanByDokter = async (req, res) => {
 
   return response.ok(res, result);
 };
-

@@ -4,14 +4,8 @@ const router = new Hono();
 const diagnosaController = require('../../controllers/rekammedis/diagnosaController');
 const auditTrail = require('../../middleware/auditTrail');
 
-router.get(
-  '/penyakit',
-  asyncHandler(diagnosaController.getDiseases)
-);
-router.get(
-  '/icd9',
-  asyncHandler(diagnosaController.getProcedures)
-);
+router.get('/penyakit', asyncHandler(diagnosaController.getDiseases));
+router.get('/icd9', asyncHandler(diagnosaController.getProcedures));
 router.post(
   '/diagnosa',
   auditTrail('Create Patient Diagnosis'),

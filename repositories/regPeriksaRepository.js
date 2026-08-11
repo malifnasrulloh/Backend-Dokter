@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { doctorInCondition } = require('../utils/doctorIdentity');
 
 const REG_PERIKSA_DETAIL = `
   SELECT
@@ -164,8 +165,9 @@ exports.getListPasienRalan = async (
   }
 
   if (dokter && dokter !== 'semua') {
-    conditions.push('reg_periksa.kd_dokter = ?');
-    params.push(dokter);
+    const cond = await doctorInCondition('reg_periksa.kd_dokter', dokter);
+    conditions.push(cond.sql);
+    params.push(...cond.params);
   }
 
   if (search) {

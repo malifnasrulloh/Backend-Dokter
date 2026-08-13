@@ -7,6 +7,7 @@ const validateTokenJWT = require('../../middleware/validateTokenJwt');
 
 router.post('/login', auditTrail('Login'), asyncHandler(authController.authentication));
 router.post('/logout', validateTokenJWT, auditTrail('Logout'), asyncHandler(authController.logout));
+router.post('/refresh', auditTrail('Refresh Token'), asyncHandler(authController.refreshToken));
 router.post(
   '/change-password',
   validateTokenJWT,

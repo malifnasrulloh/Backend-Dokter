@@ -73,6 +73,28 @@ async function resetLoginAttempts(username) {
  * `user`/`admin` tables, AES_ENCRYPT'd with DB_AES_KEY_*; a user is an
  * ADMIN only when username AND password also match the `admin` table.
  */
+const ACCESS_TOKEN_TTL_SEC = 172800; // 48 jam
+
+// Token yang kedaluwarsa ≤24 jam masih boleh di-refresh (jendela toleransi).
+const REFRESH_GRACE_SEC = 24 * 60 * 60;
+
+async function issueToken(username) {
+  const iat = Math.floor(Date.now() / 1000);
+  const exp = iat + ACCESS_TOKEN_TTL_SEC;
+
+  const payload = {
+    iss: 'SIRS RS Islam Aminah',
+    aud: 'Client RS Islam Aminah REST API',
+    iat: iat,
+    exp: exp,
+    data: {
+      username,
+    },
+  };
+
+  return new jose.SignJWT(payload).setProtectedHeader({ alg: 'HS256' }).sign(secretKey());
+}
+
 async function isAdminCredentials(username, password) {
   try {
     const [rows] = await db.query(
@@ -164,22 +186,7 @@ exports.authentication = async (req, res) => {
     // Login admin sukses — reset counter
     await resetLoginAttempts(username);
 
-    const iat = Math.floor(Date.now() / 1000);
-    const exp = iat + 172800;
-
-    const payload = {
-      iss: 'SIRS RS Islam Aminah',
-      aud: 'Client RS Islam Aminah REST API',
-      iat: iat,
-      exp: exp,
-      data: {
-        username: admin.username,
-      },
-    };
-
-    const token = await new jose.SignJWT(payload)
-      .setProtectedHeader({ alg: 'HS256' })
-      .sign(secretKey());
+    const token = await issueToken(admin.username);
 
     const [pjLab] = await db.query(`
       SELECT
@@ -262,22 +269,7 @@ exports.authentication = async (req, res) => {
       return response.unauthorized(res, null, 'Data pegawai tidak ditemukan');
     }
 
-    const iat = Math.floor(Date.now() / 1000);
-    const exp = iat + 172800;
-
-    const payload = {
-      iss: 'SIRS RS Islam Aminah',
-      aud: 'Client RS Islam Aminah REST API',
-      iat: iat,
-      exp: exp,
-      data: {
-        username: user.username,
-      },
-    };
-
-    const token = await new jose.SignJWT(payload)
-      .setProtectedHeader({ alg: 'HS256' })
-      .sign(secretKey());
+    const token = await issueToken(user.username);
 
     user.username = undefined;
     user.password = undefined;
@@ -363,6 +355,55 @@ exports.getCapabilities = async (_req, res) => {
 exports.logout = async (_req, res) => {
   res.clearCookie('token');
   return response.ok(res, null, 'Logout berhasil');
+};
+
+/**
+ * Sliding-session refresh: issues a fresh 48h token from a still-valid (or
+ * recently expired within REFRESH_GRACE_SEC) JWT, without re-authenticating.
+ * The app never stores the password for silent re-login; it refreshes here
+ * instead. Account existence is re-verified so deleted users are rejected.
+ * `deps.query` is a test seam (vitest cannot mock CJS require chains).
+ */
+exports.refreshToken = async (req, res, deps = {}) => {
+  const token = req.body?.token;
+  const query = deps.query || db.query.bind(db);
+
+  if (!token || typeof token !== 'string') {
+    return response.badRequest(res, 'Token wajib diisi');
+  }
+
+  let payload;
+  try {
+    const verified = await jose.jwtVerify(token, secretKey(), {
+      clockTolerance: REFRESH_GRACE_SEC,
+    });
+    payload = verified.payload;
+  } catch {
+    return response.unauthorized(res, null, 'Sesi berakhir, silakan login ulang');
+  }
+
+  const username = payload?.data?.username;
+  if (!username) {
+    return response.unauthorized(res, null, 'Token tidak valid');
+  }
+
+  const [admins] = await query(
+    `SELECT 1 FROM admin WHERE usere = AES_ENCRYPT(?, ?) LIMIT 1`,
+    [username, process.env.DB_AES_KEY_USER]
+  );
+  if (admins.length > 0) {
+    return response.ok(res, { token: await issueToken(username) }, 'Token berhasil diperbarui');
+  }
+
+  const [users] = await query(
+    `SELECT 1 FROM user WHERE id_user = AES_ENCRYPT(?, ?) LIMIT 1`,
+    [username, process.env.DB_AES_KEY_USER]
+  );
+  if (users.length > 0) {
+    return response.ok(res, { token: await issueToken(username) }, 'Token berhasil diperbarui');
+  }
+
+  return response.unauthorized(res, null, 'Akun tidak ditemukan, silakan login ulang');
 };
 
 exports.changePassword = async (req, res) => {

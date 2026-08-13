@@ -387,18 +387,18 @@ exports.refreshToken = async (req, res, deps = {}) => {
     return response.unauthorized(res, null, 'Token tidak valid');
   }
 
-  const [admins] = await query(
-    `SELECT 1 FROM admin WHERE usere = AES_ENCRYPT(?, ?) LIMIT 1`,
-    [username, process.env.DB_AES_KEY_USER]
-  );
+  const [admins] = await query(`SELECT 1 FROM admin WHERE usere = AES_ENCRYPT(?, ?) LIMIT 1`, [
+    username,
+    process.env.DB_AES_KEY_USER,
+  ]);
   if (admins.length > 0) {
     return response.ok(res, { token: await issueToken(username) }, 'Token berhasil diperbarui');
   }
 
-  const [users] = await query(
-    `SELECT 1 FROM user WHERE id_user = AES_ENCRYPT(?, ?) LIMIT 1`,
-    [username, process.env.DB_AES_KEY_USER]
-  );
+  const [users] = await query(`SELECT 1 FROM user WHERE id_user = AES_ENCRYPT(?, ?) LIMIT 1`, [
+    username,
+    process.env.DB_AES_KEY_USER,
+  ]);
   if (users.length > 0) {
     return response.ok(res, { token: await issueToken(username) }, 'Token berhasil diperbarui');
   }

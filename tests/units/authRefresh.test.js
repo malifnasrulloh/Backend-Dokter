@@ -44,7 +44,7 @@ describe('token refresh (POST /auth/refresh)', () => {
 
   it('issues a fresh token for an existing admin without the password', async () => {
     query.mockResolvedValueOnce([[{ 1: 1 }]]);
-    const token = await signToken();
+    const token = await signToken({ iat: Math.floor(Date.now() / 1000) - 1 });
     const res = fakeRes();
 
     await authController.refreshToken({ body: { token } }, res, { query });

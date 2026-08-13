@@ -19,6 +19,7 @@ exports.getPemeriksaanById = async (req, res) => {
               perawat.nama AS nip_nama,
               kp.kd_dokter_dikonsuli AS doc_creator_nik,
               dokter.nm_dokter AS doc_creator_name,
+              pasien.nm_pasien,
               kp.situation,
               kp.background,
               kp.assessment,
@@ -31,6 +32,8 @@ exports.getPemeriksaanById = async (req, res) => {
           LEFT JOIN pegawai perawat ON kp.nip = perawat.nik
           LEFT JOIN dokter ON kp.kd_dokter_dikonsuli = dokter.kd_dokter
           LEFT JOIN jawaban_konsultasi_perawat jkp ON kp.no_permintaan = jkp.no_permintaan
+          LEFT JOIN reg_periksa rp ON kp.no_rawat = rp.no_rawat
+          LEFT JOIN pasien ON rp.no_rkm_medis = pasien.no_rkm_medis
           WHERE kp.no_rawat = ?
           ORDER BY kp.tanggal DESC
       `;
@@ -51,6 +54,7 @@ exports.getPemeriksaanById = async (req, res) => {
     return {
       no_permintaan: row.no_permintaan,
       no_rawat: row.no_rawat,
+      nm_pasien: row.nm_pasien || null,
       tgl_perawatan: row.tanggal ? dayjs(row.tanggal).format('YYYY-MM-DD') : null,
       jam_rawat: row.tanggal ? dayjs(row.tanggal).format('HH:mm:ss') : null,
       situation: row.situation,
@@ -248,6 +252,7 @@ exports.getPemeriksaanByDokter = async (req, res) => {
               perawat.nama AS nip_nama,
               kp.kd_dokter_dikonsuli AS doc_creator_nik,
               dokter.nm_dokter AS doc_creator_name,
+              pasien.nm_pasien,
               kp.situation,
               kp.background,
               kp.assessment,
@@ -261,6 +266,8 @@ exports.getPemeriksaanByDokter = async (req, res) => {
           LEFT JOIN dokter ON kp.kd_dokter_dikonsuli = dokter.kd_dokter
           LEFT JOIN jawaban_konsultasi_perawat jkp ON kp.no_permintaan = jkp.no_permintaan
           INNER JOIN kamar_inap ki ON kp.no_rawat = ki.no_rawat
+          LEFT JOIN reg_periksa rp ON kp.no_rawat = rp.no_rawat
+          LEFT JOIN pasien ON rp.no_rkm_medis = pasien.no_rkm_medis
           WHERE kp.kd_dokter_dikonsuli = ?
             AND ki.stts_pulang = '-'
           ORDER BY kp.tanggal DESC
@@ -282,6 +289,7 @@ exports.getPemeriksaanByDokter = async (req, res) => {
     return {
       no_permintaan: row.no_permintaan,
       no_rawat: row.no_rawat,
+      nm_pasien: row.nm_pasien || null,
       tgl_perawatan: row.tanggal ? dayjs(row.tanggal).format('YYYY-MM-DD') : null,
       jam_rawat: row.tanggal ? dayjs(row.tanggal).format('HH:mm:ss') : null,
       situation: row.situation,

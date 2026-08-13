@@ -67,7 +67,11 @@ const honoLimiter = async (c, next) => {
           `[MemLimiter] Key ${rateLimitKey} diblokir (Redis offline fallback): ${entry.count} req`
         );
         return c.json(
-          { status: 429, message: 'Terlalu banyak permintaan, silakan coba lagi nanti.' },
+          {
+            code: 429,
+            success: false,
+            message: 'Terlalu banyak permintaan, silakan coba lagi nanti.',
+          },
           429
         );
       }
@@ -82,7 +86,8 @@ const honoLimiter = async (c, next) => {
     if (count > rateLimitMax) {
       return c.json(
         {
-          status: 429,
+          code: 429,
+          success: false,
           message: 'Terlalu banyak permintaan, silakan coba lagi nanti.',
         },
         429

@@ -53,6 +53,10 @@ const asyncHandler = (fn) => {
         this._honoResponse = c.body(null, this._status);
         return this._honoResponse;
       },
+      clearCookie(name, options) {
+        // No-op or cookie clearing for Hono
+        return this;
+      },
     };
 
     try {

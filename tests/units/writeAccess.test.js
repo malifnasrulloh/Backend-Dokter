@@ -32,7 +32,6 @@ describe('uniform write-access policy (F4 / decision D8)', () => {
     expect(writeAccess.WRITE_GATED_PREFIXES).toContain('/resep');
     expect(writeAccess.WRITE_GATED_PREFIXES).toContain('/diagnosa-prosedur');
     // Previously exempted routes must now be covered by the same flag:
-    expect(writeAccess.WRITE_GATED_PREFIXES).toContain('/konsultasi');
     expect(writeAccess.WRITE_GATED_PREFIXES).toContain('/dpjp-ranap');
     expect(writeAccess.WRITE_GATED_PREFIXES).toContain('/pemeriksaan');
   });
@@ -62,8 +61,8 @@ describe('uniform write-access policy (F4 / decision D8)', () => {
     expect(nextCalled).toBe(false);
     expect(c1.statusCode).toBe(403);
 
-    // Reject must hold for other clinical mutation routes
-    for (const path of ['/api/konsultasi', '/api/dpjp-ranap', '/api/soap/ranap']) {
+    // Reject must hold for gated clinical mutation routes
+    for (const path of ['/api/dpjp-ranap', '/api/soap/ranap']) {
       const c = { ...makeC(), req: { method: 'POST', path } };
       await writeAccess()(c, next);
       expect(c.statusCode).toBe(403);

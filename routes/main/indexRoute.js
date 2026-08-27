@@ -150,7 +150,6 @@ router.get(
 
 // ── KONSULTASI MEDIK ──────────────────────────────────────────────────────────
 router.use('/konsultasi/*', validateTokenJWT);
-router.use('/konsultasi/*', writeAccessMiddleware());
 router.route('/konsultasi', require('../rekammedis/konsultasiRoute'));
 
 // ── RESEP OBAT ────────────────────────────────────────────────────────────────

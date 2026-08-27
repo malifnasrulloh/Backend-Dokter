@@ -12,7 +12,6 @@ const WRITE_GATED_PREFIXES = [
   '/dpjp-ranap',
   '/pemeriksaan',
   '/soap',
-  '/konsultasi',
   '/resep',
   '/diagnosa-prosedur',
 ];

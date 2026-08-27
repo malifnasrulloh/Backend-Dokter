@@ -164,7 +164,11 @@ async function enqueueNotification(targetNik, eventName, data) {
       title = 'Inventaris Ditolak';
       body = `Pengajuan inventaris ${data?.no_pengajuan || ''} ditolak`;
       break;
-    // ── INA-CBG Billing Threshold ──
+    // ── INA-CBG Billing Threshold & Estimates ──
+    case 'cbg_estimate_updated':
+      title = 'Estimasi Tarif INA-CBG Diperbarui';
+      body = `Estimasi tarif INA-CBG untuk pasien ${data?.nm_pasien || 'Pasien'} (${data?.no_rawat || ''}) telah ditetapkan sebesar Rp ${(Number(data?.tarif) || 0).toLocaleString('id-ID')}`;
+      break;
     case 'billing_threshold_80':
       title = 'Biaya Mendekati Batas CBG';
       body = `Biaya pasien ${data?.nm_pasien || 'Unknown'} (${data?.no_rawat || ''}) telah mencapai 80% dari tarif CBG`;

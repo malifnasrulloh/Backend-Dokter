@@ -6,44 +6,144 @@ const { logger } = require('../middleware/logger');
  * INA-CBG Billing Monitor
  *
  * Periodically checks active inpatient billing against the INA-CBG tariff
- * estimate. Uses the same proven per-patient subquery from
- * perkiraanBiayaController.js — raw source tables, not billing denormalized.
+ * estimate. Uses raw source tables matching perkiraanBiayaController.js.
  *
- * Thresholds: 80%, 100%, 120% of INA-CBG tariff.
- * In-memory dedup prevents repeat alerts — zero schema coupling.
+ * Active Ranap Patient Criteria:
+ *   - reg_periksa.status_lanjut = 'Ranap'
+ *   - reg_periksa.status_bayar = 'Belum Bayar'
+ *   - kamar_inap.stts_pulang = '-'
+ *   - (kamar_inap.tgl_keluar IS NULL OR kamar_inap.tgl_keluar = '0000-00-00')
+ *
+ * Notifications:
+ *   - Thresholds: 80%, 100%, 120% of INA-CBG tariff.
+ *   - Recipients: All assigned DPJPs (dpjp_ranap), falling back to reg_periksa.kd_dokter.
+ *   - Target Identifier: Resolved login username / NIK via dokter_user_mapping / pegawai.
+ *   - Deduplication: Checked against notification_queue (persists across restarts).
  */
 
 const THRESHOLDS = [80, 100, 120];
-const POLL_INTERVAL = parseInt(process.env.INACBG_MONITOR_INTERVAL || '300000', 10);
+const POLL_INTERVAL = Number.parseInt(process.env.INACBG_MONITOR_INTERVAL || '300000', 10);
 
-const alerted = new Map();
+let pollTimer = null;
 let isPolling = false;
+
+/**
+ * Resolves a kd_dokter to the doctor's login username/NIK.
+ */
+async function resolveDoctorNik(kdDokter) {
+  if (!kdDokter || typeof kdDokter !== 'string') return kdDokter;
+
+  try {
+    // 1. Check dokter_user_mapping
+    const mapped = await knex('dokter_user_mapping')
+      .select('username')
+      .where('kd_dokter', kdDokter)
+      .first();
+    if (mapped?.username) return mapped.username;
+
+    // 2. Check if kd_dokter already matches a pegawai.nik
+    const peg = await knex('pegawai').select('nik').where('nik', kdDokter).first();
+    if (peg?.nik) return peg.nik;
+
+    // 3. Heuristic: match by dokter.nm_dokter = pegawai.nama
+    const doc = await knex('dokter').select('nm_dokter').where('kd_dokter', kdDokter).first();
+    if (doc?.nm_dokter) {
+      const pegName = await knex('pegawai').select('nik').where('nama', doc.nm_dokter).first();
+      if (pegName?.nik) return pegName.nik;
+    }
+  } catch (err) {
+    logger.warn(`[INACBG] Error resolving NIK for doctor ${kdDokter}: ${err.message}`);
+  }
+
+  return kdDokter;
+}
+
+/**
+ * Gets all target NIKs to notify for a given no_rawat (all DPJPs + fallback to reg doctor).
+ */
+async function getRecipientsForPatient(noRawat, defaultKdDokter) {
+  const niks = new Set();
+
+  try {
+    const dpjps = await knex('dpjp_ranap').select('kd_dokter').where('no_rawat', noRawat);
+
+    if (dpjps.length > 0) {
+      for (const row of dpjps) {
+        const nik = await resolveDoctorNik(row.kd_dokter);
+        if (nik) niks.add(nik);
+      }
+    } else if (defaultKdDokter) {
+      const nik = await resolveDoctorNik(defaultKdDokter);
+      if (nik) niks.add(nik);
+    }
+  } catch (err) {
+    logger.warn(`[INACBG] Error fetching recipients for ${noRawat}: ${err.message}`);
+    if (defaultKdDokter) niks.add(defaultKdDokter);
+  }
+
+  return [...niks];
+}
+
+/**
+ * Checks if an alert for this patient and threshold already exists in notification_queue.
+ */
+async function hasBeenAlerted(nik, eventName, noRawat) {
+  try {
+    const row = await knex('notification_queue')
+      .select('id')
+      .where({ nik, event_type: eventName })
+      .whereNull('deleted_at')
+      .whereRaw("JSON_UNQUOTE(JSON_EXTRACT(payload, '$.no_rawat')) = ?", [noRawat])
+      .first();
+    return Boolean(row);
+  } catch (_err) {
+    // If JSON extract is unsupported or fails, fall back to LIKE query
+    try {
+      const rowFallback = await knex('notification_queue')
+        .select('id')
+        .where({ nik, event_type: eventName })
+        .whereNull('deleted_at')
+        .where('payload', 'like', `%"no_rawat":"${noRawat}"%`)
+        .first();
+      return Boolean(rowFallback);
+    } catch {
+      return false;
+    }
+  }
+}
 
 async function poll() {
   if (isPolling) return;
   isPolling = true;
 
   try {
-    // Get active Ranap patients WITH perkiraan_biaya_ranap tariff
+    // 1. Get active Ranap patients with tariff in perkiraan_biaya_ranap
     const patients = await knex('reg_periksa as rp')
-      .select('rp.no_rawat', 'rp.kd_dokter', 'rp.biaya_reg', 'pbr.tarif as estimasi', 'p.nm_pasien')
-      .innerJoin('perkiraan_biaya_ranap as pbr', 'rp.no_rawat', 'pbr.no_rawat')
+      .join('kamar_inap as ki', 'rp.no_rawat', 'ki.no_rawat')
+      .join('perkiraan_biaya_ranap as pbr', 'rp.no_rawat', 'pbr.no_rawat')
       .leftJoin('pasien as p', 'rp.no_rkm_medis', 'p.no_rkm_medis')
+      .select('rp.no_rawat', 'rp.kd_dokter', 'rp.biaya_reg', 'p.nm_pasien')
+      .max('pbr.tarif as estimasi')
       .where('rp.status_lanjut', 'Ranap')
-      .whereIn('rp.stts', ['Belum', 'Dirawat']);
+      .where('rp.status_bayar', 'Belum Bayar')
+      .where('ki.stts_pulang', '-')
+      .where((qb) => {
+        qb.whereNull('ki.tgl_keluar').orWhere('ki.tgl_keluar', '0000-00-00');
+      })
+      .groupBy('rp.no_rawat', 'rp.kd_dokter', 'rp.biaya_reg', 'p.nm_pasien')
+      .having(knex.raw('COALESCE(MAX(pbr.tarif), 0) > 0'));
 
     if (patients.length === 0) {
-      logger.info('[INACBG] No active Ranap patients with tariff found');
+      logger.info('[INACBG] No active Ranap patients with INA-CBG tariff found');
       return;
     }
 
-    // Compute total billing per patient using the same subquery as controller
+    // 2. Compute total billing per patient using raw source tables
     for (const pt of patients) {
       const n = pt.no_rawat;
       const estimasi = Number(pt.estimasi) || 0;
       if (estimasi <= 0) continue;
 
-      // Same query as perkiraanBiayaController.js — raw source table totals
       const [rows] = await knex.raw(
         `
         SELECT
@@ -158,10 +258,12 @@ async function poll() {
       const total_biaya = jumlah_rs + jasa + jumlah_penunjang + potongan;
 
       const ratio = Math.round((total_biaya / estimasi) * 100);
-      const already = alerted.get(n) || new Set();
+
+      // 3. Resolve target recipients (DPJPs + fallback)
+      const recipientNiks = await getRecipientsForPatient(n, pt.kd_dokter);
 
       for (const threshold of THRESHOLDS) {
-        if (ratio >= threshold && !already.has(threshold)) {
+        if (ratio >= threshold) {
           const eventName =
             threshold === 80
               ? 'billing_threshold_80'
@@ -169,28 +271,24 @@ async function poll() {
                 ? 'billing_threshold_100'
                 : 'billing_threshold_120';
 
-          await enqueueNotification(pt.kd_dokter, eventName, {
-            no_rawat: n,
-            nm_pasien: pt.nm_pasien || 'Unknown',
-            total_real: total_biaya,
-            estimasi_inacbg: estimasi,
-            rasio: ratio,
-          });
+          for (const targetNik of recipientNiks) {
+            const alreadyAlerted = await hasBeenAlerted(targetNik, eventName, n);
+            if (!alreadyAlerted) {
+              await enqueueNotification(targetNik, eventName, {
+                no_rawat: n,
+                nm_pasien: pt.nm_pasien || 'Unknown',
+                total_real: total_biaya,
+                estimasi_inacbg: estimasi,
+                rasio: ratio,
+              });
 
-          already.add(threshold);
-          alerted.set(n, already);
-
-          logger.info(
-            `[INACBG] Alerted ${pt.kd_dokter} for ${n}: ${ratio}% (threshold ${threshold}%)`
-          );
+              logger.info(
+                `[INACBG] Alerted ${targetNik} for ${n}: ${ratio}% (threshold ${threshold}%)`
+              );
+            }
+          }
         }
       }
-    }
-
-    // Cleanup discharged patients from memory
-    const activeSet = new Set(patients.map((r) => r.no_rawat));
-    for (const key of alerted.keys()) {
-      if (!activeSet.has(key)) alerted.delete(key);
     }
   } catch (err) {
     logger.error(`[INACBG] Poll error: ${err.message}`);
@@ -202,7 +300,22 @@ async function poll() {
 function start() {
   logger.info('[INACBG] Monitor started (interval: 5min)');
   poll();
-  setInterval(poll, POLL_INTERVAL);
+  if (!pollTimer) {
+    pollTimer = setInterval(poll, POLL_INTERVAL);
+  }
 }
 
-module.exports = { start };
+function stop() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+module.exports = {
+  start,
+  stop,
+  poll,
+  resolveDoctorNik,
+  getRecipientsForPatient,
+};

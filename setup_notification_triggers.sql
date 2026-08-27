@@ -1093,6 +1093,105 @@ BEGIN
 END//
 
 -- ==============================================================
+-- G. PERKIRAAN BIAYA RANAP (INA-CBG Tariff Estimates)
+-- ==============================================================
+
+-- G1. perkiraan_biaya_ranap → cbg_estimate_updated (INSERT) ──
+DROP TRIGGER IF EXISTS trg_notify_perkiraan_biaya_ranap_insert//
+
+CREATE TRIGGER trg_notify_perkiraan_biaya_ranap_insert
+AFTER INSERT ON perkiraan_biaya_ranap
+FOR EACH ROW
+BEGIN
+  DECLARE v_nm_pasien VARCHAR(100);
+  DECLARE v_kd_dokter VARCHAR(20);
+  DECLARE done INT DEFAULT FALSE;
+  DECLARE cur_dpjp CURSOR FOR SELECT kd_dokter FROM dpjp_ranap WHERE no_rawat = NEW.no_rawat;
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+
+  SELECT COALESCE(p.nm_pasien, 'Pasien'), rp.kd_dokter 
+  INTO v_nm_pasien, v_kd_dokter
+  FROM reg_periksa rp 
+  LEFT JOIN pasien p ON p.no_rkm_medis = rp.no_rkm_medis
+  WHERE rp.no_rawat = NEW.no_rawat LIMIT 1;
+
+  OPEN cur_dpjp;
+  dpjp_loop: LOOP
+    FETCH cur_dpjp INTO v_kd_dokter;
+    IF done THEN
+      LEAVE dpjp_loop;
+    END IF;
+    INSERT INTO {{DB_NAME}}.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+    VALUES (
+      v_kd_dokter, 'cbg_estimate_updated', 'Estimasi Tarif INA-CBG Diperbarui',
+      CONCAT('Estimasi tarif INA-CBG untuk pasien ', v_nm_pasien, ' (', NEW.no_rawat, ') telah ditetapkan sebesar Rp ', FORMAT(NEW.tarif, 0, 'de_DE')),
+      JSON_OBJECT('no_rawat', NEW.no_rawat, 'nm_pasien', v_nm_pasien, 'tarif', NEW.tarif, 'kd_penyakit', NEW.kd_penyakit),
+      NOW(3), 'perkiraan_biaya_ranap', CONCAT(NEW.no_rawat, ':', NEW.kd_penyakit)
+    );
+  END LOOP;
+  CLOSE cur_dpjp;
+
+  -- Fallback to registration doctor if no DPJP assigned
+  IF done AND NOT EXISTS (SELECT 1 FROM dpjp_ranap WHERE no_rawat = NEW.no_rawat) AND v_kd_dokter IS NOT NULL THEN
+    INSERT INTO {{DB_NAME}}.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+    VALUES (
+      v_kd_dokter, 'cbg_estimate_updated', 'Estimasi Tarif INA-CBG Diperbarui',
+      CONCAT('Estimasi tarif INA-CBG untuk pasien ', v_nm_pasien, ' (', NEW.no_rawat, ') telah ditetapkan sebesar Rp ', FORMAT(NEW.tarif, 0, 'de_DE')),
+      JSON_OBJECT('no_rawat', NEW.no_rawat, 'nm_pasien', v_nm_pasien, 'tarif', NEW.tarif, 'kd_penyakit', NEW.kd_penyakit),
+      NOW(3), 'perkiraan_biaya_ranap', CONCAT(NEW.no_rawat, ':', NEW.kd_penyakit)
+    );
+  END IF;
+END//
+
+-- G2. perkiraan_biaya_ranap → cbg_estimate_updated (UPDATE) ──
+DROP TRIGGER IF EXISTS trg_notify_perkiraan_biaya_ranap_update//
+
+CREATE TRIGGER trg_notify_perkiraan_biaya_ranap_update
+AFTER UPDATE ON perkiraan_biaya_ranap
+FOR EACH ROW
+BEGIN
+  DECLARE v_nm_pasien VARCHAR(100);
+  DECLARE v_kd_dokter VARCHAR(20);
+  DECLARE done INT DEFAULT FALSE;
+  DECLARE cur_dpjp CURSOR FOR SELECT kd_dokter FROM dpjp_ranap WHERE no_rawat = NEW.no_rawat;
+  DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+
+  IF NEW.tarif <> OLD.tarif OR NEW.kd_penyakit <> OLD.kd_penyakit THEN
+    SELECT COALESCE(p.nm_pasien, 'Pasien'), rp.kd_dokter 
+    INTO v_nm_pasien, v_kd_dokter
+    FROM reg_periksa rp 
+    LEFT JOIN pasien p ON p.no_rkm_medis = rp.no_rkm_medis
+    WHERE rp.no_rawat = NEW.no_rawat LIMIT 1;
+
+    OPEN cur_dpjp;
+    dpjp_loop: LOOP
+      FETCH cur_dpjp INTO v_kd_dokter;
+      IF done THEN
+        LEAVE dpjp_loop;
+      END IF;
+      INSERT INTO {{DB_NAME}}.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+      VALUES (
+        v_kd_dokter, 'cbg_estimate_updated', 'Estimasi Tarif INA-CBG Diperbarui',
+        CONCAT('Estimasi tarif INA-CBG untuk pasien ', v_nm_pasien, ' (', NEW.no_rawat, ') telah diubah menjadi Rp ', FORMAT(NEW.tarif, 0, 'de_DE')),
+        JSON_OBJECT('no_rawat', NEW.no_rawat, 'nm_pasien', v_nm_pasien, 'tarif', NEW.tarif, 'kd_penyakit', NEW.kd_penyakit),
+        NOW(3), 'perkiraan_biaya_ranap', CONCAT(NEW.no_rawat, ':', NEW.kd_penyakit)
+      );
+    END LOOP;
+    CLOSE cur_dpjp;
+
+    IF done AND NOT EXISTS (SELECT 1 FROM dpjp_ranap WHERE no_rawat = NEW.no_rawat) AND v_kd_dokter IS NOT NULL THEN
+      INSERT INTO {{DB_NAME}}.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+      VALUES (
+        v_kd_dokter, 'cbg_estimate_updated', 'Estimasi Tarif INA-CBG Diperbarui',
+        CONCAT('Estimasi tarif INA-CBG untuk pasien ', v_nm_pasien, ' (', NEW.no_rawat, ') telah diubah menjadi Rp ', FORMAT(NEW.tarif, 0, 'de_DE')),
+        JSON_OBJECT('no_rawat', NEW.no_rawat, 'nm_pasien', v_nm_pasien, 'tarif', NEW.tarif, 'kd_penyakit', NEW.kd_penyakit),
+        NOW(3), 'perkiraan_biaya_ranap', CONCAT(NEW.no_rawat, ':', NEW.kd_penyakit)
+      );
+    END IF;
+  END IF;
+END//
+
+-- ==============================================================
 -- RESET DELIMITER
 -- ==============================================================
 DELIMITER ;

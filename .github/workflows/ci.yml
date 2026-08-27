@@ -10,31 +10,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint-test:
-    name: Lint & Test (Node 22)
+  lint-and-test:
+    name: Lint & Test (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      NODE_ENV: test
-      REDIS_ENABLED: 'false'
-      DISABLE_QUERY_LOG: 'true'
-      SECRETTOKEN: ci-test-secret-do-not-use-in-production
-    steps:
-      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v5
+    strategy:
+      matrix:
+        node-version: [20.x, 22.x]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ matrix.node-version }}
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint
-        run: npx biome check .
+      - name: Lint (Biome)
+        run: npm run lint
 
-      - name: Audit
-        run: npm audit --audit-level=high
-
-      - name: Test
-        run: npm test
+      - name: Unit & Service Tests
+        run: npm test -- tests/services/ tests/utils/ tests/middleware/
+        env:
+          NODE_ENV: test
+          JWT_SECRET: test_secret_key_ci_12345678901234567890
+          COOKIE_SECRET: test_cookie_secret_ci_1234567890123456

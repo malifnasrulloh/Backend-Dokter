@@ -1048,6 +1048,51 @@ BEGIN
 END//
 
 -- ==============================================================
+-- F. DPJP RANAP (Inpatient Primary Doctor Assignments)
+-- ==============================================================
+
+-- F1. dpjp_ranap → dpjp_assigned / dpjp_removed ────────────────
+DROP TRIGGER IF EXISTS trg_notify_dpjp_ranap_insert//
+
+CREATE TRIGGER trg_notify_dpjp_ranap_insert
+AFTER INSERT ON dpjp_ranap
+FOR EACH ROW
+BEGIN
+  DECLARE v_nm_pasien VARCHAR(100);
+  SELECT COALESCE(p.nm_pasien, 'Pasien') INTO v_nm_pasien
+  FROM reg_periksa rp LEFT JOIN pasien p ON p.no_rkm_medis = rp.no_rkm_medis
+  WHERE rp.no_rawat = NEW.no_rawat LIMIT 1;
+
+  INSERT INTO {{DB_NAME}}.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+  VALUES (
+    NEW.kd_dokter, 'dpjp_assigned', 'Penugasan DPJP Ranap',
+    CONCAT('Anda ditugaskan sebagai DPJP untuk pasien ', v_nm_pasien, ' (', NEW.no_rawat, ')'),
+    JSON_OBJECT('no_rawat', NEW.no_rawat, 'nm_pasien', v_nm_pasien, 'kd_dokter', NEW.kd_dokter),
+    NOW(3), 'dpjp_ranap', CONCAT(NEW.no_rawat, ':', NEW.kd_dokter)
+  );
+END//
+
+DROP TRIGGER IF EXISTS trg_notify_del_dpjp_ranap//
+
+CREATE TRIGGER trg_notify_del_dpjp_ranap
+AFTER DELETE ON dpjp_ranap
+FOR EACH ROW
+BEGIN
+  DECLARE v_nm_pasien VARCHAR(100);
+  SELECT COALESCE(p.nm_pasien, 'Pasien') INTO v_nm_pasien
+  FROM reg_periksa rp LEFT JOIN pasien p ON p.no_rkm_medis = rp.no_rkm_medis
+  WHERE rp.no_rawat = OLD.no_rawat LIMIT 1;
+
+  INSERT INTO {{DB_NAME}}.notification_queue (nik, event_type, title, body, payload, created_at, source_table, source_pk)
+  VALUES (
+    OLD.kd_dokter, 'dpjp_removed', 'Pencabutan DPJP Ranap',
+    CONCAT('Penugasan DPJP Anda untuk pasien ', v_nm_pasien, ' (', OLD.no_rawat, ') telah dicabut'),
+    JSON_OBJECT('no_rawat', OLD.no_rawat, 'nm_pasien', v_nm_pasien, 'kd_dokter', OLD.kd_dokter),
+    NOW(3), 'dpjp_ranap', CONCAT(OLD.no_rawat, ':', OLD.kd_dokter)
+  );
+END//
+
+-- ==============================================================
 -- RESET DELIMITER
 -- ==============================================================
 DELIMITER ;

@@ -22,6 +22,14 @@ async function enqueueNotification(targetNik, eventName, data) {
       title = 'Pasien Baru Terdaftar';
       body = `Anda telah didelegasikan sebagai DPJP untuk ${data?.nm_pasien || 'Pasien Baru'} (${data?.no_rawat || ''})`;
       break;
+    case 'dpjp_assigned':
+      title = 'Penugasan DPJP Ranap';
+      body = `Anda ditugaskan sebagai DPJP untuk pasien ${data?.nm_pasien || 'Rawat Inap'} (${data?.no_rawat || ''})`;
+      break;
+    case 'dpjp_removed':
+      title = 'Pencabutan DPJP Ranap';
+      body = `Penugasan DPJP Anda untuk pasien ${data?.nm_pasien || 'Rawat Inap'} (${data?.no_rawat || ''}) telah dicabut`;
+      break;
     case 'emergency_igd_consultation':
       title = 'URGENT: KONSUL IGD';
       body = `Permintaan konsultasi segera dari ${data?.nm_dokter_pemberi || 'Rekan Dokter'} untuk pasien ${data?.nm_pasien || 'Pasien'}`;

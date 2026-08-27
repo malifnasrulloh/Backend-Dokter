@@ -63,7 +63,7 @@ exports.inputDpjp = async (req, res) => {
 
       if (kd_dokter.length > 0) {
         for (const kd of kd_dokter) {
-          await sendNotification(kd, 'new_admission', {
+          await sendNotification(kd, 'dpjp_assigned', {
             no_rawat,
             nm_pasien,
           });
@@ -118,7 +118,7 @@ exports.updateDpjp = async (req, res) => {
 
       if (kd_dokter.length > 0) {
         for (const kd of kd_dokter) {
-          await sendNotification(kd, 'new_admission', {
+          await sendNotification(kd, 'dpjp_assigned', {
             no_rawat,
             nm_pasien,
           });

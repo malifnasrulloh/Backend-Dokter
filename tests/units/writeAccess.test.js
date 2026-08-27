@@ -62,12 +62,21 @@ describe('uniform write-access policy (F4 / decision D8)', () => {
     expect(nextCalled).toBe(false);
     expect(c1.statusCode).toBe(403);
 
-    // Reject must hold for the previously-exempted routes too
-    for (const path of ['/api/konsultasi', '/api/dpjp-ranap', '/api/pemeriksaan/validasi']) {
+    // Reject must hold for other clinical mutation routes
+    for (const path of ['/api/konsultasi', '/api/dpjp-ranap', '/api/soap/ranap']) {
       const c = { ...makeC(), req: { method: 'POST', path } };
       await writeAccess()(c, next);
       expect(c.statusCode).toBe(403);
     }
+
+    // SBAR validation is explicitly exempted from write access gating
+    const cExempt = { ...makeC(), req: { method: 'POST', path: '/api/pemeriksaan/validasi' } };
+    let exemptNextCalled = false;
+    await writeAccess()(cExempt, async () => {
+      exemptNextCalled = true;
+    });
+    expect(exemptNextCalled).toBe(true);
+    expect(cExempt.statusCode).toBe(200);
 
     process.env.ALLOW_MOBILE_WRITE = 'true';
     const c2 = makeC();

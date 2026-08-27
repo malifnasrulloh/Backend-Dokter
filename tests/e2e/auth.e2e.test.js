@@ -49,7 +49,7 @@ describe('1. Authentication & Session Flow', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        username: DOCTOR_USER.username,
+        username: 'wrong_password_test_user',
         password: 'incorrect_password',
       }),
     });

@@ -24,13 +24,19 @@ function writeAccessEnabled() {
 
 /**
  * Hono middleware to reject write/modify requests when ALLOW_MOBILE_WRITE is set to false.
+ * Supports exempting specific paths (e.g. SBAR validation: /pemeriksaan/validasi).
  */
-const writeAccessMiddleware = () => {
+const writeAccessMiddleware = (options = {}) => {
+  const exemptPaths = options.exemptPaths || ['/api/pemeriksaan/validasi', '/pemeriksaan/validasi'];
+
   return async (c, next) => {
     const allowWrite = writeAccessEnabled();
     const method = c.req.method;
+    const path = c.req.path;
 
-    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method) && !allowWrite) {
+    const isExempt = exemptPaths.some((p) => path.endsWith(p) || path === p);
+
+    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method) && !allowWrite && !isExempt) {
       const res = {
         _status: 403,
         status(code) {

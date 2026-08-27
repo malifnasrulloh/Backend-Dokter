@@ -1,8 +1,8 @@
 const { Hono } = require('hono');
 const { serve } = require('@hono/node-server');
 
-const DOCTOR_USER = { username: '123456', password: '123456' };
-const ADMIN_USER = { username: 'spv', password: 'server' };
+const DOCTOR_USER = { username: '2021011402', password: '2021011402' };
+const ADMIN_USER = { username: 'AdminRSBSDH', password: 'AksesRSBSDH' };
 
 const RANAP_NO_RAWAT = '2026/08/24/000002';
 const RALAN_NO_RAWAT = '2026/08/26/000002';

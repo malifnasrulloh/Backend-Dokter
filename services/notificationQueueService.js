@@ -189,6 +189,12 @@ async function enqueueNotification(targetNik, eventName, data) {
       title = 'Cuti Ditolak (Manajemen)';
       body = `Pengajuan cuti ${data?.no_pengajuan || ''} ditolak oleh manajemen`;
       break;
+    case 'harian_access_updated':
+      title = 'Akses Jasa Medis Diperbarui';
+      body = data?.enabled
+        ? 'Akses menu Jasa Medis / Laporan Harian Anda telah diaktifkan oleh Admin.'
+        : 'Akses menu Jasa Medis / Laporan Harian Anda telah dinonaktifkan oleh Admin.';
+      break;
     default:
       title = eventName;
       body = JSON.stringify(data || {});

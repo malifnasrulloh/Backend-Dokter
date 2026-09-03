@@ -592,15 +592,53 @@ exports.updateHarianAccess = async (req, res) => {
   try {
     const val = harian_dokter === true ? 'true' : 'false';
 
+    // 1. First attempt: update using kd_dokter directly as id_user
     const updateQuery = `
       UPDATE user
       SET harian_dokter = ?
       WHERE TRIM(CAST(AES_DECRYPT(id_user, ?) AS CHAR)) = ?
     `;
-    const [result] = await db.query(updateQuery, [val, process.env.DB_AES_KEY_USER, kd_dokter]);
+    let [result] = await db.query(updateQuery, [val, process.env.DB_AES_KEY_USER, kd_dokter]);
+
+    // 2. Dual-lookup fallback: in Khanza sik_temps, some doctors have user.id_user as pegawai.nik
+    let resolvedNik = kd_dokter;
+    if (result.affectedRows === 0) {
+      const [docRows] = await db.query(
+        `SELECT pegawai.nik FROM dokter INNER JOIN pegawai ON dokter.kd_dokter = pegawai.nik WHERE dokter.kd_dokter = ? LIMIT 1`,
+        [kd_dokter]
+      );
+      if (docRows.length > 0 && docRows[0].nik) {
+        resolvedNik = docRows[0].nik;
+        const [fallbackResult] = await db.query(updateQuery, [
+          val,
+          process.env.DB_AES_KEY_USER,
+          resolvedNik,
+        ]);
+        result = fallbackResult;
+      }
+    }
 
     if (result.affectedRows === 0) {
       return response.notFound(res, 'Pengguna (dokter) tidak ditemukan di tabel user');
+    }
+
+    // 3. Dual-enqueue real-time notification to notification_queue (Settled 1A & Round 3 Q1)
+    try {
+      const { enqueueNotification } = require('../../services/notificationQueueService');
+      const notifPayload = {
+        enabled: harian_dokter === true,
+        kd_dokter,
+      };
+
+      // Enqueue to kd_dokter
+      await enqueueNotification(kd_dokter, 'harian_access_updated', notifPayload);
+
+      // If resolvedNik differs from kd_dokter, enqueue to resolvedNik too
+      if (resolvedNik && resolvedNik !== kd_dokter) {
+        await enqueueNotification(resolvedNik, 'harian_access_updated', notifPayload);
+      }
+    } catch (notifErr) {
+      logger.error('Failed to enqueue harian_access_updated notification:', notifErr);
     }
 
     return response.ok(res, null, 'Akses Harian Dokter berhasil diperbarui');

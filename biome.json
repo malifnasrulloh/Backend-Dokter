@@ -87,6 +87,16 @@
       }
     },
     {
+      "includes": ["**/tests/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUnusedVariables": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["**/loaders/**"],
       "linter": {
         "rules": {

@@ -64,6 +64,38 @@ describe('5. Services, Finance, Settings, Notifications & Security Middleware', 
         expect(data.data[0]).toHaveProperty('png_jawab');
       }
     });
+
+    it('Enforces 403 Forbidden on /api/harian-dokter when doctor access is disabled', async () => {
+      // 1. Disable access via admin
+      await api('PUT', '/api/auth/harian-access', adminToken, {
+        kd_dokter: DOCTOR_USER.username,
+        harian_dokter: false,
+      });
+
+      // 2. Doctor request should be forbidden (403)
+      const { res, data } = await api('GET', '/api/harian-dokter', doctorToken);
+      expect(res.status).toBe(403);
+      expect(data.message).toContain('dinonaktifkan oleh Administrator');
+
+      // 3. Re-enable access for subsequent tests
+      await api('PUT', '/api/auth/harian-access', adminToken, {
+        kd_dokter: DOCTOR_USER.username,
+        harian_dokter: true,
+      });
+
+      const { res: reRes } = await api('GET', '/api/harian-dokter', doctorToken);
+      expect([200, 204]).toContain(reRes.status);
+    });
+
+    it('Admin can audit any doctor fee via ?dokter= query parameter', async () => {
+      const { res, data } = await api(
+        'GET',
+        `/api/harian-dokter?dokter=${DOCTOR_USER.username}`,
+        adminToken
+      );
+      expect(res.status).toBe(200);
+      expect(data.success).toBe(true);
+    });
   });
 
   // ── SETTINGS ────────────────────────────────────────────────────────

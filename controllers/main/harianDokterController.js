@@ -1,7 +1,73 @@
 const knex = require('../../config/knex');
+const db = require('../../config/db');
 const response = require('../../middleware/responseHandler');
 const { logger } = require('../../middleware/logger');
 const cache = require('../../utils/cache');
+
+/**
+ * Resolves doctor code and enforces role-based access control.
+ * - Admin: Allowed to query any doctor via req.query.dokter or defaults to all/self.
+ * - Doctor: Strictly constrained to req.user.username (ignores req.query.dokter to prevent IDOR).
+ *           Must have user.harian_dokter === 'true'.
+ */
+async function resolveDoctorAndCheckAccess(req) {
+  const username = req.user?.username;
+  if (!username) {
+    return { error: 'unauthorized', message: 'User tidak terautentikasi' };
+  }
+
+  // 1. Check if requester is Admin
+  const [adminCheck] = await db.query(
+    `SELECT 1 FROM admin WHERE TRIM(CAST(AES_DECRYPT(usere, ?) AS CHAR)) = ? LIMIT 1`,
+    [process.env.DB_AES_KEY_USER, username]
+  );
+  const isAdmin = adminCheck.length > 0;
+
+  if (isAdmin) {
+    const kd_dokter = req.query.dokter || username;
+    return { kd_dokter, isAdmin: true };
+  }
+
+  // 2. Doctor: Check permission in user table (supporting dual lookup by username or resolved kd_dokter)
+  const [userCheck] = await db.query(
+    `SELECT harian_dokter FROM user WHERE TRIM(CAST(AES_DECRYPT(id_user, ?) AS CHAR)) = ? LIMIT 1`,
+    [process.env.DB_AES_KEY_USER, username]
+  );
+
+  let hasAccess =
+    userCheck.length > 0 &&
+    (userCheck[0].harian_dokter === 'true' || userCheck[0].harian_dokter === true);
+
+  // If not found in user directly with username, check if username is a dokter with a matching pegawai.nik
+  let doctorCode = username;
+  if (!hasAccess && userCheck.length === 0) {
+    const [docCheck] = await db.query(
+      `SELECT dokter.kd_dokter, user.harian_dokter
+       FROM dokter
+       INNER JOIN pegawai ON dokter.kd_dokter = pegawai.nik
+       INNER JOIN user ON TRIM(CAST(AES_DECRYPT(user.id_user, ?) AS CHAR)) = pegawai.nik
+       WHERE dokter.kd_dokter = ? LIMIT 1`,
+      [process.env.DB_AES_KEY_USER, username]
+    );
+    if (
+      docCheck.length > 0 &&
+      (docCheck[0].harian_dokter === 'true' || docCheck[0].harian_dokter === true)
+    ) {
+      hasAccess = true;
+      doctorCode = docCheck[0].kd_dokter;
+    }
+  }
+
+  if (!hasAccess) {
+    return {
+      error: 'forbidden',
+      message: 'Akses menu Jasa Medis / Harian Dokter dinonaktifkan oleh Administrator.',
+    };
+  }
+
+  // Doctor must only access their own fee records (IDOR protection)
+  return { kd_dokter: doctorCode, isAdmin: false };
+}
 
 const getTodayString = () => {
   const today = new Date();
@@ -425,6 +491,15 @@ function buildHarianDokterQueries(params, kd_dokter) {
 }
 
 exports.getHarianDokter = async (req, res) => {
+  const authRes = await resolveDoctorAndCheckAccess(req);
+  if (authRes.error === 'unauthorized') {
+    return response.unauthorized(res, null, authRes.message);
+  }
+  if (authRes.error === 'forbidden') {
+    return response.forbidden(res, authRes.message);
+  }
+
+  const kd_dokter = authRes.kd_dokter;
   const tgl1 = req.query.tgl1 || getTodayString();
   const tgl2 = req.query.tgl2 || getTodayString();
   const status = req.query.status || 'Semua';
@@ -433,12 +508,6 @@ exports.getHarianDokter = async (req, res) => {
   const search = req.query.search || '';
   const page = parseInt(req.query.page, 10) || 1;
   const limit = parseInt(req.query.limit, 10) || 50;
-
-  const kd_dokter = req.query.dokter || req.user?.username;
-
-  if (!kd_dokter) {
-    return response.unauthorized(res, null, 'Dokter tidak teridentifikasi');
-  }
 
   try {
     const queries = buildHarianDokterQueries(
@@ -481,18 +550,21 @@ exports.getHarianDokter = async (req, res) => {
 };
 
 exports.getHarianDokterSummary = async (req, res) => {
+  const authRes = await resolveDoctorAndCheckAccess(req);
+  if (authRes.error === 'unauthorized') {
+    return response.unauthorized(res, null, authRes.message);
+  }
+  if (authRes.error === 'forbidden') {
+    return response.forbidden(res, authRes.message);
+  }
+
+  const kd_dokter = authRes.kd_dokter;
   const tgl1 = req.query.tgl1 || getTodayString();
   const tgl2 = req.query.tgl2 || getTodayString();
   const status = req.query.status || 'Semua';
   const kd_pj = req.query.kd_pj || 'Semua';
   const kategori = req.query.kategori || 'RJ,RI,OP,LAB,RAD';
   const search = req.query.search || '';
-
-  const kd_dokter = req.query.dokter || req.user?.username;
-
-  if (!kd_dokter) {
-    return response.unauthorized(res, null, 'Dokter tidak teridentifikasi');
-  }
 
   try {
     const queries = buildHarianDokterQueries(
@@ -537,6 +609,14 @@ exports.getHarianDokterSummary = async (req, res) => {
 };
 
 exports.getCaraBayar = async (req, res) => {
+  const authRes = await resolveDoctorAndCheckAccess(req);
+  if (authRes.error === 'unauthorized') {
+    return response.unauthorized(res, null, authRes.message);
+  }
+  if (authRes.error === 'forbidden') {
+    return response.forbidden(res, authRes.message);
+  }
+
   const cacheKey = 'harian_dokter_cara_bayar';
 
   try {

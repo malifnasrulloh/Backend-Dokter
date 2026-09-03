@@ -126,6 +126,39 @@ describe('5. Services, Finance, Settings, Notifications & Security Middleware', 
       });
       expect(res.status).toBe(200);
     });
+
+    it('GET /api/setting/app-version returns current app release configuration', async () => {
+      const { res, data } = await api('GET', '/api/setting/app-version', doctorToken);
+      expect(res.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data).toHaveProperty('version_name');
+      expect(data.data).toHaveProperty('version_code');
+      expect(data.data).toHaveProperty('download_url');
+    });
+
+    it('POST /api/setting/app-version allows admin to publish a new release', async () => {
+      const { res, data } = await api('POST', '/api/setting/app-version', adminToken, {
+        version_name: '1.3.1',
+        version_code: 2,
+        min_supported_version: '1.2.0',
+        release_notes: 'Pembaruan keamanan dan modul cloud update.',
+        sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+      });
+      expect(res.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.version_name).toBe('1.3.1');
+      expect(data.data.sha256_checksum).toBe(
+        'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+      );
+    });
+
+    it('POST /api/setting/app-version forbids non-admin doctor', async () => {
+      const { res } = await api('POST', '/api/setting/app-version', doctorToken, {
+        version_name: '1.3.2',
+        version_code: 3,
+      });
+      expect(res.status).toBe(403);
+    });
   });
 
   // ── PERKIRAAN BIAYA (FINANCE) ────────────────────────────────────────

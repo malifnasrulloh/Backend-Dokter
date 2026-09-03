@@ -8,5 +8,12 @@ router.get('/', asyncHandler(settingController.getSetting));
 router.put('/', auditTrail('Setting'), asyncHandler(settingController.updateSetting));
 router.get('/broadcast', asyncHandler(settingController.getBroadcast));
 router.put('/broadcast', auditTrail('Setting'), asyncHandler(settingController.updateBroadcast));
+router.get('/app-version', asyncHandler(settingController.getAppVersion));
+router.post(
+  '/app-version',
+  auditTrail('Publish App Version'),
+  asyncHandler(settingController.publishAppVersion)
+);
+router.get('/app-download', asyncHandler(settingController.downloadApp));
 
 module.exports = router;

@@ -14,6 +14,11 @@ router.post(
   auditTrail('Publish App Version'),
   asyncHandler(settingController.publishAppVersion)
 );
+router.post(
+  '/app-upload',
+  auditTrail('Upload App Release'),
+  asyncHandler(settingController.uploadAndPublishApp)
+);
 router.get('/app-download', asyncHandler(settingController.downloadApp));
 
 module.exports = router;

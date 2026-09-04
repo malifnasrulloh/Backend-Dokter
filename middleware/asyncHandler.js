@@ -33,6 +33,7 @@ const asyncHandler = (fn) => {
       _status: 200,
       headersSent: false,
       _honoResponse: null,
+      c,
 
       status(statusCode) {
         this._status = statusCode;

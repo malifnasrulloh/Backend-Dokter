@@ -22,6 +22,11 @@ const sanitizeObject = (obj, depth = 0) => {
   if (depth > 10) return obj;
   if (obj === null || obj === undefined) return obj;
 
+  // Preserve File / Blob / Buffer binary objects from being stripped into empty plain objects
+  if (typeof obj.arrayBuffer === 'function' || Buffer.isBuffer(obj) || obj instanceof Uint8Array) {
+    return obj;
+  }
+
   if (typeof obj === 'string') return sanitizeString(obj);
   if (typeof obj !== 'object') return obj;
   if (Array.isArray(obj)) return obj.map((item) => sanitizeObject(item, depth + 1));

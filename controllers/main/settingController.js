@@ -165,6 +165,95 @@ exports.publishAppVersion = async (req, res) => {
 };
 
 /**
+ * POST /api/setting/app-upload
+ * Admin endpoint: upload APK file directly over multipart/form-data.
+ * Automatically saves file, calculates SHA-256 hash, and registers the release.
+ */
+exports.uploadAndPublishApp = async (req, res) => {
+  const username = req.user?.username;
+  if (!username) {
+    return response.unauthorized(res, null, 'User tidak terautentikasi');
+  }
+
+  // Admin verification
+  const [adminCheck] = await db.query(
+    `SELECT 1 FROM admin WHERE TRIM(CAST(AES_DECRYPT(usere, ?) AS CHAR)) = ? LIMIT 1`,
+    [process.env.DB_AES_KEY_USER, username]
+  );
+  if (adminCheck.length === 0) {
+    return response.forbidden(res, 'Hanya administrator yang diizinkan mengunggah rilis aplikasi.');
+  }
+
+  const body = req.body || {};
+  const file = body.file;
+  const version_name = body.version_name;
+  const version_code = body.version_code;
+  const min_supported_version = body.min_supported_version;
+  const release_notes = body.release_notes;
+
+  if (!file) {
+    return response.badRequest(res, 'Berkas APK (file) wajib diunggah.');
+  }
+
+  if (!version_name || !version_code) {
+    return response.badRequest(res, 'version_name dan version_code wajib disertakan.');
+  }
+
+  const targetFileName = `edokter-v${version_name}.apk`;
+  const releasesDir = path.join(__dirname, '../../uploads/releases');
+  if (!fs.existsSync(releasesDir)) {
+    fs.mkdirSync(releasesDir, { recursive: true });
+  }
+  const targetPath = path.join(releasesDir, targetFileName);
+
+  // Buffer handling: either Hono File (Web Blob) or Node buffer
+  let fileBuffer;
+  if (typeof file.arrayBuffer === 'function') {
+    fileBuffer = Buffer.from(await file.arrayBuffer());
+  } else if (Buffer.isBuffer(file)) {
+    fileBuffer = file;
+  } else {
+    return response.badRequest(res, 'Format data file tidak valid.');
+  }
+
+  fs.writeFileSync(targetPath, fileBuffer);
+  const finalFileSize = fileBuffer.length;
+  const finalChecksum = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+  const downloadUrl = `/api/setting/app-download?file=${encodeURIComponent(targetFileName)}`;
+
+  await db.query(
+    `INSERT INTO app_releases (
+      app_name, version_name, version_code, min_supported_version,
+      release_notes, file_name, file_size, sha256_checksum, download_url, is_active
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+    [
+      'E-Dokter',
+      version_name,
+      parseInt(version_code, 10),
+      min_supported_version || version_name,
+      release_notes || '',
+      targetFileName,
+      finalFileSize,
+      finalChecksum,
+      downloadUrl,
+    ]
+  );
+
+  return response.ok(
+    res,
+    {
+      version_name,
+      version_code: parseInt(version_code, 10),
+      min_supported_version: min_supported_version || version_name,
+      sha256_checksum: finalChecksum,
+      file_size: finalFileSize,
+      download_url: downloadUrl,
+    },
+    'Berkas APK berhasil diunggah dan dirilis.'
+  );
+};
+
+/**
  * GET /api/setting/app-download
  * Streams the APK file with Content-Length and octet-stream headers for reliable mobile downloading.
  */
@@ -179,16 +268,12 @@ exports.downloadApp = async (req, res) => {
     return response.notFound(res, 'File APK rilis belum tersedia di server.');
   }
 
+  const fileBuffer = fs.readFileSync(filePath);
   const stat = fs.statSync(filePath);
-  const stream = fs.createReadStream(filePath);
 
-  res.status(200);
-  res.headers = {
-    ...res.headers,
+  return res.c.body(fileBuffer, 200, {
     'Content-Type': 'application/vnd.android.package-archive',
     'Content-Disposition': `attachment; filename="${safeBase}"`,
     'Content-Length': stat.size.toString(),
-  };
-
-  return stream;
+  });
 };

@@ -159,6 +159,50 @@ describe('5. Services, Finance, Settings, Notifications & Security Middleware', 
       });
       expect(res.status).toBe(403);
     });
+
+    it('POST /api/setting/app-upload uploads APK via multipart/form-data and auto-publishes', async () => {
+      const { BASE_URL } = require('./helpers');
+      const formData = new FormData();
+      const mockApkContent = Buffer.from('PK\x03\x04mock_apk_content_for_upload_test');
+      const mockBlob = new Blob([mockApkContent], {
+        type: 'application/vnd.android.package-archive',
+      });
+
+      formData.append('file', mockBlob, 'edokter-v1.3.2.apk');
+      formData.append('version_name', '1.3.2');
+      formData.append('version_code', '3');
+      formData.append('min_supported_version', '1.3.0');
+      formData.append('release_notes', 'Otomatisasi upload APK langsung.');
+
+      const uploadRes = await fetch(`${BASE_URL}/api/setting/app-upload`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: formData,
+      });
+      const data = await uploadRes.json();
+
+      expect(uploadRes.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.data.version_name).toBe('1.3.2');
+      expect(data.data.file_size).toBeGreaterThan(0);
+      expect(data.data.sha256_checksum).toBeDefined();
+
+      // Verify it can be downloaded via streaming endpoint
+      const downloadRes = await fetch(
+        `${BASE_URL}/api/setting/app-download?file=edokter-v1.3.2.apk`,
+        {
+          headers: {
+            Authorization: `Bearer ${doctorToken}`,
+          },
+        }
+      );
+      expect(downloadRes.status).toBe(200);
+      expect(downloadRes.headers.get('content-type')).toBe(
+        'application/vnd.android.package-archive'
+      );
+    });
   });
 
   // ── PERKIRAAN BIAYA (FINANCE) ────────────────────────────────────────

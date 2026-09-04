@@ -143,15 +143,20 @@ module.exports = (app, _corsOptions) => {
     })
   );
 
-  // Body size limit (10MB max)
+  // Body size limit: 10MB default, 150MB for app releases upload
   app.use('*', async (c, next) => {
     const method = c.req.method;
     if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
+      const isReleaseUpload = c.req.path === '/api/setting/app-upload';
       const contentLength = parseInt(c.req.header('content-length') || '0', 10);
-      const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10MB
-      if (contentLength > MAX_BODY_SIZE) {
+      const maxBodySize = isReleaseUpload ? 150 * 1024 * 1024 : 10 * 1024 * 1024;
+      if (contentLength > maxBodySize) {
         c.status(413);
-        return c.json({ code: 413, success: false, message: 'Request body too large (max 10MB)' });
+        return c.json({
+          code: 413,
+          success: false,
+          message: `Request body too large (max ${isReleaseUpload ? '150MB' : '10MB'})`,
+        });
       }
     }
     await next();

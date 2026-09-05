@@ -65,7 +65,7 @@ exports.getAppVersion = async (_req, res) => {
       created_at
     FROM app_releases
     WHERE is_active = 1
-    ORDER BY version_code DESC
+    ORDER BY version_code DESC, id DESC
     LIMIT 1
   `);
 
@@ -199,13 +199,6 @@ exports.uploadAndPublishApp = async (req, res) => {
     return response.badRequest(res, 'version_name dan version_code wajib disertakan.');
   }
 
-  const targetFileName = `edokter-v${version_name}.apk`;
-  const releasesDir = path.join(__dirname, '../../uploads/releases');
-  if (!fs.existsSync(releasesDir)) {
-    fs.mkdirSync(releasesDir, { recursive: true });
-  }
-  const targetPath = path.join(releasesDir, targetFileName);
-
   // Buffer handling: either Hono File (Web Blob) or Node buffer
   let fileBuffer;
   if (typeof file.arrayBuffer === 'function') {
@@ -216,10 +209,24 @@ exports.uploadAndPublishApp = async (req, res) => {
     return response.badRequest(res, 'Format data file tidak valid.');
   }
 
-  fs.writeFileSync(targetPath, fileBuffer);
   const finalFileSize = fileBuffer.length;
   const finalChecksum = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+  const shortHash = finalChecksum.substring(0, 8);
+  const targetFileName = `edokter-v${version_name}-b${version_code}-${shortHash}.apk`;
+
+  const releasesDir = path.join(__dirname, '../../uploads/releases');
+  if (!fs.existsSync(releasesDir)) {
+    fs.mkdirSync(releasesDir, { recursive: true });
+  }
+  const targetPath = path.join(releasesDir, targetFileName);
+
+  fs.writeFileSync(targetPath, fileBuffer);
   const downloadUrl = `/api/setting/app-download?file=${encodeURIComponent(targetFileName)}`;
+
+  // Deactivate any prior active releases for the same or older version to prevent hash ambiguity
+  await db.query(`UPDATE app_releases SET is_active = 0 WHERE version_code <= ?`, [
+    parseInt(version_code, 10),
+  ]);
 
   await db.query(
     `INSERT INTO app_releases (

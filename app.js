@@ -35,6 +35,10 @@ async function startServer() {
   const inacbgMonitor = require('./services/inacbgMonitorService');
   inacbgMonitor.start();
 
+  // Start real-time FCM queue watcher daemon (1s interval)
+  const fcmQueueWatcher = require('./services/fcmQueueWatcher');
+  fcmQueueWatcher.start();
+
   process.on('uncaughtException', (error) => {
     logger.error(`Uncaught Exception: ${error.message}\n${error.stack}`);
   });

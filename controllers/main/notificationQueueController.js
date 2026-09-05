@@ -120,3 +120,87 @@ exports.ackNotifications = async (c) => {
     return c.json({ success: false, message: 'Gagal mengirim ack' });
   }
 };
+
+/**
+ * POST /notifications/fcm-token
+ * Registers or updates FCM device push token for the authenticated doctor.
+ * Body: { device_id, fcm_token, platform }
+ */
+exports.registerFcmToken = async (c) => {
+  const nik = c.get('user')?.username;
+  if (!nik) {
+    c.status(401);
+    return c.json({ success: false, message: 'User tidak terautentikasi' });
+  }
+
+  const body = c.get('body') || {};
+  const { device_id, fcm_token, platform } = body;
+
+  if (!device_id || !fcm_token) {
+    c.status(400);
+    return c.json({
+      success: false,
+      message: 'device_id dan fcm_token wajib disertakan',
+    });
+  }
+
+  try {
+    await knex('user_fcm_tokens')
+      .insert({
+        nik,
+        device_id,
+        fcm_token,
+        platform: platform || 'android',
+        updated_at: knex.raw('NOW()'),
+      })
+      .onConflict(['nik', 'device_id'])
+      .merge({
+        fcm_token,
+        platform: platform || 'android',
+        updated_at: knex.raw('NOW()'),
+      });
+
+    return c.json({
+      success: true,
+      message: 'FCM token berhasil didaftarkan',
+    });
+  } catch (err) {
+    logger.error('[NotificationQueue] Register FCM token error:', err);
+    c.status(500);
+    return c.json({ success: false, message: 'Gagal mendaftarkan FCM token' });
+  }
+};
+
+/**
+ * DELETE /notifications/fcm-token
+ * Removes FCM token for a device on logout or token rotation.
+ * Body: { device_id }
+ */
+exports.removeFcmToken = async (c) => {
+  const nik = c.get('user')?.username;
+  if (!nik) {
+    c.status(401);
+    return c.json({ success: false, message: 'User tidak terautentikasi' });
+  }
+
+  const body = c.get('body') || {};
+  const { device_id } = body;
+
+  if (!device_id) {
+    c.status(400);
+    return c.json({ success: false, message: 'device_id wajib disertakan' });
+  }
+
+  try {
+    await knex('user_fcm_tokens').where({ nik, device_id }).del();
+
+    return c.json({
+      success: true,
+      message: 'FCM token berhasil dihapus',
+    });
+  } catch (err) {
+    logger.error('[NotificationQueue] Remove FCM token error:', err);
+    c.status(500);
+    return c.json({ success: false, message: 'Gagal menghapus FCM token' });
+  }
+};

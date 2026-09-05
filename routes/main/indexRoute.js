@@ -130,7 +130,7 @@ router.use('/soap/*', validateTokenJWT);
 router.use('/soap/*', writeAccessMiddleware());
 router.route('/soap', require('../rekammedis/soapRoute'));
 
-// ── NOTIFICATION QUEUE (DB-backed polling) ────────────────────────────────────
+// ── NOTIFICATION QUEUE & FCM PUSH ─────────────────────────────────────────────
 router.get(
   '/notifications/poll',
   validateTokenJWT,
@@ -140,6 +140,16 @@ router.post(
   '/notifications/ack',
   validateTokenJWT,
   require('../../controllers/main/notificationQueueController').ackNotifications
+);
+router.post(
+  '/notifications/fcm-token',
+  validateTokenJWT,
+  require('../../controllers/main/notificationQueueController').registerFcmToken
+);
+router.delete(
+  '/notifications/fcm-token',
+  validateTokenJWT,
+  require('../../controllers/main/notificationQueueController').removeFcmToken
 );
 // DEPRECATED: SSE — kept for backward compat; remove after migration validated
 router.get(

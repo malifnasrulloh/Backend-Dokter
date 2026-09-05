@@ -131,3 +131,8 @@ database_schema_dump.json
 VersiJava/
 RME HVA+device.json
 *.zip
+
+# Sensitive Service Account Keys & Releases
+config/*firebase-adminsdk*.json
+config/*service-account*.json
+uploads/

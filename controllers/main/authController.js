@@ -352,7 +352,23 @@ exports.getCapabilities = async (_req, res) => {
   });
 };
 
-exports.logout = async (_req, res) => {
+exports.logout = async (req, res) => {
+  const username = req.user?.username;
+  const deviceId = req.body?.device_id;
+
+  if (username) {
+    try {
+      const knex = require('../../config/knex');
+      if (deviceId) {
+        await knex('user_fcm_tokens').where({ nik: username, device_id: deviceId }).del();
+      } else {
+        await knex('user_fcm_tokens').where({ nik: username }).del();
+      }
+    } catch (err) {
+      logger.error('[Auth] Logout FCM token cleanup error:', err);
+    }
+  }
+
   res.clearCookie('token');
   return response.ok(res, null, 'Logout berhasil');
 };

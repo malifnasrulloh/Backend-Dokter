@@ -28,4 +28,16 @@ router.delete(
   asyncHandler(soapController.deleteSoapRanap)
 );
 
+const soapVerificationController = require('../../controllers/rekammedis/pemeriksaan/soapVerificationController');
+router.post(
+  '/verifikasi',
+  auditTrail('Verifikasi SOAPIE DPJP'),
+  asyncHandler(soapVerificationController.verifikasiSoap)
+);
+router.delete(
+  '/verifikasi',
+  auditTrail('Batal Verifikasi SOAPIE DPJP'),
+  asyncHandler(soapVerificationController.batalVerifikasiSoap)
+);
+
 module.exports = router;

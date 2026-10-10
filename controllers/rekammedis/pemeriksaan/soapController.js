@@ -3,6 +3,8 @@ const response = require('../../../middleware/responseHandler');
 const validateParams = require('../../../middleware/validateParams');
 const dayjs = require('dayjs');
 const { logger } = require('../../../middleware/logger');
+const { isDoctorDPJP, verifySoap } = require('../../../services/soapVerificationService');
+const { resolveDoctorKdSet } = require('../../../utils/doctorIdentity');
 
 // ── OUTPATIENT (RALAN) SOAP ──────────────────────────────────────────────────
 
@@ -71,6 +73,29 @@ exports.createSoapRalan = async (req, res) => {
     };
 
     await knex('pemeriksaan_ralan').insert(data);
+
+    // Auto-verify if the creator is DPJP
+    try {
+      const isDPJP = await isDoctorDPJP(no_rawat, nip, 'ralan');
+      if (isDPJP) {
+        const doctorCodes = await resolveDoctorKdSet(nip);
+        const kdDokter = doctorCodes.length > 0 ? doctorCodes[0] : nip;
+        await verifySoap({
+          noRawat: no_rawat,
+          tglPerawatan: tgl_perawatan,
+          jamRawat: jam_rawat,
+          jenis: 'ralan',
+          kdDokter,
+          catatan: 'Otomatis terverifikasi oleh pembuat (DPJP)',
+          isSuperAdmin: true,
+        }).catch((err) => {
+          logger.warn(`Auto-verify SOAP Ralan warning: ${err.message}`);
+        });
+      }
+    } catch (verifErr) {
+      logger.warn(`Auto-verify SOAP Ralan check error: ${verifErr.message}`);
+    }
+
     return response.created(res, data);
   } catch (error) {
     logger.error('Create SOAP Ralan Error:', error);
@@ -195,6 +220,29 @@ exports.createSoapRanap = async (req, res) => {
     };
 
     await knex('pemeriksaan_ranap').insert(data);
+
+    // Auto-verify if the creator is DPJP
+    try {
+      const isDPJP = await isDoctorDPJP(no_rawat, nip, 'ranap');
+      if (isDPJP) {
+        const doctorCodes = await resolveDoctorKdSet(nip);
+        const kdDokter = doctorCodes.length > 0 ? doctorCodes[0] : nip;
+        await verifySoap({
+          noRawat: no_rawat,
+          tglPerawatan: tgl_perawatan,
+          jamRawat: jam_rawat,
+          jenis: 'ranap',
+          kdDokter,
+          catatan: 'Otomatis terverifikasi oleh pembuat (DPJP)',
+          isSuperAdmin: true,
+        }).catch((err) => {
+          logger.warn(`Auto-verify SOAP Ranap warning: ${err.message}`);
+        });
+      }
+    } catch (verifErr) {
+      logger.warn(`Auto-verify SOAP Ranap check error: ${verifErr.message}`);
+    }
+
     return response.created(res, data);
   } catch (error) {
     logger.error('Create SOAP Ranap Error:', error);

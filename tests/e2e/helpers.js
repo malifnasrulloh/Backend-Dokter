@@ -23,6 +23,9 @@ async function startServer() {
   delete require.cache[require.resolve('../../config/db')];
   delete require.cache[require.resolve('../../config/knex')];
 
+  const { runMigrations } = require('../../config/dbMigrate');
+  await runMigrations().catch(() => {});
+
   const honoLoader = require('../../loaders/hono');
   const app = new Hono();
   honoLoader(app);

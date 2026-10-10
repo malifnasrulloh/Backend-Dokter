@@ -26,7 +26,12 @@ function writeAccessEnabled() {
  * Supports exempting specific paths (e.g. SBAR validation: /pemeriksaan/validasi).
  */
 const writeAccessMiddleware = (options = {}) => {
-  const exemptPaths = options.exemptPaths || ['/api/pemeriksaan/validasi', '/pemeriksaan/validasi'];
+  const exemptPaths = options.exemptPaths || [
+    '/api/pemeriksaan/validasi',
+    '/pemeriksaan/validasi',
+    '/api/soap/verifikasi',
+    '/soap/verifikasi',
+  ];
 
   return async (c, next) => {
     const allowWrite = writeAccessEnabled();

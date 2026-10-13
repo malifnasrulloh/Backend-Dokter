@@ -64,7 +64,7 @@ exports.getRiwayatSoapRalan = async (req, res) => {
           LEFT JOIN dokter dok_v ON dok_v.kd_dokter = verif.kd_dokter
           LEFT JOIN pegawai peg_v ON peg_v.nik = verif.kd_dokter
       WHERE
-          reg_periksa.no_rkm_medis = (SELECT no_rkm_medis FROM reg_periksa WHERE no_rawat = ?)
+          pemeriksaan_ralan.no_rawat = ?
       ORDER BY
           pemeriksaan_ralan.tgl_perawatan,
           pemeriksaan_ralan.jam_rawat`;
